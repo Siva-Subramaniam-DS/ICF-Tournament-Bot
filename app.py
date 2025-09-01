@@ -594,7 +594,7 @@ def get_random_template():
             return random.choice(image_files)
     return None
 
-def create_event_poster(template_path: str, round_num: int, team1_captain: str, team2_captain: str, utc_time: str, date_str: str = None, tournament_name: str = "King of the Seas", server_name: str = "😈 The Devil's Spot 😈") -> str:
+def create_event_poster(template_path: str, round_num: int, team1_captain: str, team2_captain: str, utc_time: str, date_str: str = None, tournament_name: str = "King of the Seas", server_name: str = "The Devil's Spot") -> str:
     """Create event poster with text overlays"""
     try:
         # Open the template image
@@ -675,28 +675,59 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 # Draw main emoji text
                 pilmoji.text((x, y), text, font=font, fill=text_color)
             
-            # Add server name (top center)
-            server_text = server_name
-            server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
-            server_width = server_bbox[2] - server_bbox[0]
-            server_x = (width - server_width) // 2
-            server_y = int(height * 0.05)
-            draw_emoji_text_with_outline(server_text, server_x, server_y, font_title, text_color, outline_color)
-            
-            # Add tournament name (below server name)
-            tournament_text = tournament_name.upper()
-            tournament_bbox = draw.textbbox((0, 0), tournament_text, font=font_tiny)
-            tournament_width = tournament_bbox[2] - tournament_bbox[0]
-            tournament_x = (width - tournament_width) // 2
-            tournament_y = int(height * 0.15)
-            draw_text_with_outline(tournament_text, tournament_x, tournament_y, font_tiny, text_color, outline_color, 1)
+            # Add server logo (top center)
+            try:
+                logo_path = "logo.png"
+                if os.path.exists(logo_path):
+                    with Image.open(logo_path) as logo_img:
+                        # Convert logo to RGBA if needed
+                        if logo_img.mode != 'RGBA':
+                            logo_img = logo_img.convert('RGBA')
+                        
+                        # Calculate logo size (about 25% of poster height - bigger)
+                        logo_size = int(height * 0.25)
+                        
+                        # Resize logo while maintaining aspect ratio
+                        logo_ratio = logo_img.width / logo_img.height
+                        if logo_ratio > 1:  # Wider than tall
+                            logo_width = logo_size
+                            logo_height = int(logo_size / logo_ratio)
+                        else:  # Taller than wide
+                            logo_height = logo_size
+                            logo_width = int(logo_size * logo_ratio)
+                        
+                        logo_img = logo_img.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+                        
+                        # Calculate position (center horizontally, top area)
+                        logo_x = (width - logo_width) // 2
+                        logo_y = int(height * 0.05)
+                        
+                        # Paste logo onto poster
+                        poster.paste(logo_img, (logo_x, logo_y), logo_img)
+                else:
+                    # Fallback to text if logo not found
+                    server_text = server_name
+                    server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
+                    server_width = server_bbox[2] - server_bbox[0]
+                    server_x = (width - server_width) // 2
+                    server_y = int(height * 0.05)
+                    draw_emoji_text_with_outline(server_text, server_x, server_y, font_title, text_color, outline_color)
+            except Exception as e:
+                print(f"Error adding logo: {e}")
+                # Fallback to text if logo fails
+                server_text = server_name
+                server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
+                server_width = server_bbox[2] - server_bbox[0]
+                server_x = (width - server_width) // 2
+                server_y = int(height * 0.05)
+                draw_emoji_text_with_outline(server_text, server_x, server_y, font_title, text_color, outline_color)
             
             # Add Round text (center)
             round_text = f"ROUND {round_num}"
             round_bbox = draw.textbbox((0, 0), round_text, font=font_large)
             round_width = round_bbox[2] - round_bbox[0]
             round_x = (width - round_width) // 2
-            round_y = int(height * 0.35)
+            round_y = int(height * 0.40)
             draw_text_with_outline(round_text, round_x, round_y, font_large, text_color, outline_color)
             
             # Add Captain vs Captain text (center)
@@ -704,7 +735,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             vs_bbox = draw.textbbox((0, 0), vs_text, font=font_medium)
             vs_width = vs_bbox[2] - vs_bbox[0]
             vs_x = (width - vs_width) // 2
-            vs_y = int(height * 0.52)
+            vs_y = int(height * 0.55)
             draw_text_with_outline(vs_text, vs_x, vs_y, font_medium, text_color, outline_color)
             
             # Add date (if provided)
@@ -1052,8 +1083,7 @@ async def event_create(
             team_2_captain.display_name, 
             time_info['utc_time_simple'],
             f"{date:02d}/{month:02d}/{current_year}",
-            "King of the Seas",
-            "😈 The Devil's Spot 😈"
+            "King of the Seas"
         )
     
     # Create event embed with new format
