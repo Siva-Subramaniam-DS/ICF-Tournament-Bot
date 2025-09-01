@@ -16,9 +16,11 @@ requests>=2.31.0
 
 # Date and time utilities
 python-dateutil>=2.8.0
+pytz>=2023.3
 
 # Image processing (for enhanced image utilities)
 Pillow>=10.0.0
+pilmoji>=2.0.4
 
 # Async utilities
 asyncio-throttle>=1.0.0
