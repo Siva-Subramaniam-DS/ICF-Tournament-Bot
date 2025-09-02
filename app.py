@@ -15,6 +15,7 @@ import pytz
 from PIL import Image, ImageDraw, ImageFont
 # Removed pilmoji import due to dependency issues
 import io
+import json
 
 # Load environment variables
 load_dotenv()
@@ -52,6 +53,42 @@ tree = bot.tree
 
 # Store scheduled events for reminders
 scheduled_events = {}
+
+# Load scheduled events from file on startup
+def load_scheduled_events():
+    global scheduled_events
+    try:
+        if os.path.exists('scheduled_events.json'):
+            with open('scheduled_events.json', 'r') as f:
+                data = json.load(f)
+                # Convert datetime strings back to datetime objects
+                for event_id, event_data in data.items():
+                    if 'datetime' in event_data:
+                        event_data['datetime'] = datetime.datetime.fromisoformat(event_data['datetime'])
+                scheduled_events = data
+                print(f"Loaded {len(scheduled_events)} scheduled events from file")
+    except Exception as e:
+        print(f"Error loading scheduled events: {e}")
+        scheduled_events = {}
+
+# Save scheduled events to file
+def save_scheduled_events():
+    try:
+        # Convert datetime objects to strings for JSON serialization
+        data_to_save = {}
+        for event_id, event_data in scheduled_events.items():
+            event_copy = event_data.copy()
+            if 'datetime' in event_copy:
+                event_copy['datetime'] = event_copy['datetime'].isoformat()
+            # Remove non-serializable objects like discord.Member
+            if 'judge' in event_copy:
+                event_copy['judge'] = None
+            data_to_save[event_id] = event_copy
+        
+        with open('scheduled_events.json', 'w') as f:
+            json.dump(data_to_save, f, indent=2)
+    except Exception as e:
+        print(f"Error saving scheduled events: {e}")
 
 # Track per-event reminder tasks (for cancellation/update)
 reminder_tasks = {}
@@ -460,11 +497,7 @@ async def send_event_reminder(delay: float, event_id: str, team1_captain: discor
                 participants_value = f"**Team 1:** {team1_captain.mention}\n**Team 2:** {team2_captain.mention}"
             event_embed.add_field(name="👥 Participants", value=participants_value, inline=False)
             
-            event_embed.add_field(
-                name="📋 Instructions",
-                value="• Team captains should gather their teams\n• Judge should prepare for the match\n• Join the designated voice channel\n• Good luck and have fun! 🎮",
-                inline=False
-            )
+
             
             event_embed.set_footer(text="Match Reminder • 😈The Devil's Spot😈")
             
@@ -612,55 +645,92 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             # Get image dimensions
             width, height = poster.size
             
-            # Try to load a font, fallback to default if not available
+            # Try to load fonts with better visibility and readability
             try:
-                # Try to use larger fonts for better visibility - much bigger sizes
-                font_title = ImageFont.truetype("arialbd.ttf", int(height * 0.12))   # Title font (bigger)
-                font_large = ImageFont.truetype("arialbd.ttf", int(height * 0.15))   # Round number (bigger)
-                font_medium = ImageFont.truetype("arialbd.ttf", int(height * 0.10))  # VS text (bigger)
-                font_small = ImageFont.truetype("arialbd.ttf", int(height * 0.08))   # Time and date (bigger)
-                font_tiny = ImageFont.truetype("arialbd.ttf", int(height * 0.06))    # Tournament name (bigger)
+                # Try multiple font options for better visibility
+                font_options = [
+                    "C:/Windows/Fonts/impact.ttf",      # Impact - very bold and visible
+                    "C:/Windows/Fonts/arialbd.ttf",     # Arial Bold
+                    "C:/Windows/Fonts/calibrib.ttf",    # Calibri Bold
+                    "C:/Windows/Fonts/verdanab.ttf",    # Verdana Bold
+                    "C:/Windows/Fonts/trebucbd.ttf",    # Trebuchet MS Bold
+                ]
+                
+                font_path = None
+                for font_option in font_options:
+                    if os.path.exists(font_option):
+                        font_path = font_option
+                        break
+                
+                if font_path:
+                    # Use larger, more visible font sizes
+                    font_title = ImageFont.truetype(font_path, int(height * 0.14))   # Title font (even bigger)
+                    font_large = ImageFont.truetype(font_path, int(height * 0.18))   # Round number (much bigger)
+                    font_medium = ImageFont.truetype(font_path, int(height * 0.12))  # VS text (bigger)
+                    font_small = ImageFont.truetype(font_path, int(height * 0.09))   # Time and date (bigger)
+                    font_tiny = ImageFont.truetype(font_path, int(height * 0.07))    # Tournament name (bigger)
+                else:
+                    raise Exception("No suitable font found")
+                    
             except:
                 try:
-                    # Fallback to regular Arial with much bigger sizes if bold Arial not available
-                    font_title = ImageFont.truetype("arial.ttf", int(height * 0.12))
-                    font_large = ImageFont.truetype("arial.ttf", int(height * 0.15))
-                    font_medium = ImageFont.truetype("arial.ttf", int(height * 0.10))
-                    font_small = ImageFont.truetype("arial.ttf", int(height * 0.08))
-                    font_tiny = ImageFont.truetype("arial.ttf", int(height * 0.06))
+                    # Fallback to regular Arial with bigger sizes
+                    font_title = ImageFont.truetype("arial.ttf", int(height * 0.14))
+                    font_large = ImageFont.truetype("arial.ttf", int(height * 0.18))
+                    font_medium = ImageFont.truetype("arial.ttf", int(height * 0.12))
+                    font_small = ImageFont.truetype("arial.ttf", int(height * 0.09))
+                    font_tiny = ImageFont.truetype("arial.ttf", int(height * 0.07))
                 except:
-                    # Final fallback to default font
-                    font_title = ImageFont.load_default()
-                    font_large = ImageFont.load_default()
-                    font_medium = ImageFont.load_default()
-                    font_small = ImageFont.load_default()
-                    font_tiny = ImageFont.load_default()
+                    # Final fallback to default font with larger sizes
+                    try:
+                        font_title = ImageFont.load_default().font_variant(size=int(height * 0.14))
+                        font_large = ImageFont.load_default().font_variant(size=int(height * 0.18))
+                        font_medium = ImageFont.load_default().font_variant(size=int(height * 0.12))
+                        font_small = ImageFont.load_default().font_variant(size=int(height * 0.09))
+                        font_tiny = ImageFont.load_default().font_variant(size=int(height * 0.07))
+                    except:
+                        font_title = ImageFont.load_default()
+                        font_large = ImageFont.load_default()
+                        font_medium = ImageFont.load_default()
+                        font_small = ImageFont.load_default()
+                        font_tiny = ImageFont.load_default()
             
-            # Define colors (white with black outline for visibility)
+            # Define colors for maximum visibility
             text_color = (255, 255, 255)  # White
             outline_color = (0, 0, 0)     # Black
+            shadow_color = (64, 64, 64)   # Dark gray for shadow
             
-            # Helper function to draw text with outline
-            def draw_text_with_outline(text, x, y, font, text_color, outline_color, outline_width=2):
+            # Enhanced helper function to draw text with outline and shadow for maximum visibility
+            def draw_text_with_outline(text, x, y, font, text_color, outline_color, outline_width=3):
                 # Convert coordinates to integers
                 x, y = int(x), int(y)
-                # Draw outline
+                
+                # Draw shadow first (offset by 2 pixels)
+                draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+                
+                # Draw thick outline for better visibility
                 for dx in range(-outline_width, outline_width + 1):
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
                             draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
-                # Draw main text
+                
+                # Draw main text on top
                 draw.text((x, y), text, font=font, fill=text_color)
             
-            def draw_emoji_text_with_outline(text, x, y, font, text_color, outline_color, outline_width=2):
+            def draw_emoji_text_with_outline(text, x, y, font, text_color, outline_color, outline_width=3):
                 # Convert coordinates to integers
                 x, y = int(x), int(y)
-                # Draw outline for text (emojis will display as unicode text)
+                
+                # Draw shadow first (offset by 2 pixels)
+                draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+                
+                # Draw thick outline for better visibility (emojis will display as unicode text)
                 for dx in range(-outline_width, outline_width + 1):
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
                             draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
-                # Draw main text
+                
+                # Draw main text on top
                 draw.text((x, y), text, font=font, fill=text_color)
             
             # Add server logo (top center)
@@ -830,6 +900,9 @@ async def on_ready():
     print(f"✅ Bot is online as {bot.user}")
     print(f"🆔 Bot ID: {bot.user.id}")
     print(f"📊 Connected to {len(bot.guilds)} guild(s)")
+    
+    # Load scheduled events from file
+    load_scheduled_events()
     
     # Sync commands
     try:
@@ -1058,6 +1131,9 @@ async def event_create(
         'team2_captain': team_2_captain
     }
     
+    # Save events to file
+    save_scheduled_events()
+    
     # Get random template image and create poster
     template_image = get_random_template()
     poster_image = None
@@ -1099,16 +1175,25 @@ async def event_create(
         inline=False
     )
     
+    # Add spacing
+    embed.add_field(name="\u200b", value="\u200b", inline=False)
+    
     # Captains Section
     captains_text = f"**Captains**\n"
     captains_text += f"▪ Team1 Captain: {team_1_captain.mention}\n"
     captains_text += f"▪ Team2 Captain: {team_2_captain.mention}"
     embed.add_field(name="👑 Team Captains", value=captains_text, inline=False)
     
+    # Add spacing
+    embed.add_field(name="\u200b", value="\u200b", inline=False)
+    
     # Staff Section
     staff_text = f"**Staffs**\n"
     staff_text += f"▪ Judge: *To be assigned*"
     embed.add_field(name="👨‍⚖️ Staff", value=staff_text, inline=False)
+    
+    # Add spacing
+    embed.add_field(name="\u200b", value="\u200b", inline=False)
     
     embed.add_field(name="👤 Created By", value=interaction.user.mention, inline=False)
     
@@ -1440,7 +1525,7 @@ async def event_delete(interaction: discord.Interaction):
     try:
         # Check if there are any scheduled events
         if not scheduled_events:
-            await interaction.response.send_message("❌ No scheduled events found to delete.", ephemeral=True)
+            await interaction.response.send_message(f"❌ No scheduled events found to delete.\n\n**Debug Info:**\n• Scheduled events count: {len(scheduled_events)}\n• Events in memory: {list(scheduled_events.keys()) if scheduled_events else 'None'}", ephemeral=True)
             return
         
         # Create dropdown with event names
@@ -1477,6 +1562,9 @@ async def event_delete(interaction: discord.Interaction):
                 
                 # Remove from scheduled events
                 del scheduled_events[selected_event_id]
+                
+                # Save events to file
+                save_scheduled_events()
                 
                 # Create confirmation embed
                 embed = discord.Embed(
