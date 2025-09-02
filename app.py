@@ -676,7 +676,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             
             # Add server logo (top center)
             try:
-                logo_path = "logo.png"
+                logo_path = "D1logo.png"
                 if os.path.exists(logo_path):
                     with Image.open(logo_path) as logo_img:
                         # Convert logo to RGBA if needed
