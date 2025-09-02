@@ -13,7 +13,7 @@ import glob
 from discord.ui import Button, View
 import pytz
 from PIL import Image, ImageDraw, ImageFont
-from pilmoji import Pilmoji
+# Removed pilmoji import due to dependency issues
 import io
 
 # Load environment variables
@@ -618,8 +618,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             poster = img.copy()
             draw = ImageDraw.Draw(poster)
             
-            # Create Pilmoji instance for emoji rendering
-            pilmoji = Pilmoji(poster)
+            # Use regular PIL drawing (emojis will be displayed as text)
             
             # Get image dimensions
             width, height = poster.size
@@ -667,13 +666,13 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             def draw_emoji_text_with_outline(text, x, y, font, text_color, outline_color, outline_width=2):
                 # Convert coordinates to integers
                 x, y = int(x), int(y)
-                # Draw outline for emoji text
+                # Draw outline for text (emojis will display as unicode text)
                 for dx in range(-outline_width, outline_width + 1):
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
-                            pilmoji.text((x + dx, y + dy), text, font=font, fill=outline_color)
-                # Draw main emoji text
-                pilmoji.text((x, y), text, font=font, fill=text_color)
+                            draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
+                # Draw main text
+                draw.text((x, y), text, font=font, fill=text_color)
             
             # Add server logo (top center)
             try:
