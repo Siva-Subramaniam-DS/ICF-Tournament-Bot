@@ -249,10 +249,9 @@ class TakeScheduleButton(View):
             # Send notification to the event channel
             await self.send_judge_assignment_notification(interaction.user)
             
-            # Schedule reminder
+            # Update scheduled events with judge
             if self.event_id in scheduled_events:
                 scheduled_events[self.event_id]['judge'] = self.judge
-            await schedule_event_reminder_v2(self.event_id, self.team1_captain, self.team2_captain, self.judge, self.event_channel)
             
         except Exception as e:
             # Reset flag in case of error
@@ -1073,11 +1072,13 @@ async def event_create(
     )
     
     # Tournament and Time Information
+    # Create Discord timestamp for automatic timezone conversion
+    timestamp = int(event_datetime.timestamp())
     embed.add_field(
         name="📋 Event Details", 
         value=f"**Tournament:** King of the Seas\n"
               f"**UTC Time:** {time_info['utc_time']}\n"
-              f"**Local Time:** {time_info['local_time']}\n"
+              f"**Local Time:** <t:{timestamp}:F>\n"
               f"**Round:** Round {round}\n"
               f"**Channel:** {interaction.channel.mention}",
         inline=False
@@ -1151,11 +1152,7 @@ async def event_create(
         else:
             await interaction.channel.send(embed=embed)
 
-        # Schedule a 10-minute pre-start reminder for captains immediately (judge added later)
-        try:
-            await schedule_event_reminder(event_id, team_1_captain, team_2_captain, None, interaction.channel)
-        except Exception as e:
-            print(f"Error scheduling event reminder: {e}")
+        # Event created successfully (reminder system removed)
     except Exception as e:
         await interaction.followup.send(f"⚠️ Could not post in current channel: {e}", ephemeral=True)
 
@@ -1297,7 +1294,9 @@ async def event_result(
         if staff_attendance_channel:
             # Create staff attendance message
             attendance_text = f"🏅 {winner.display_name} Vs {loser.display_name}\n"
-            attendance_text += f"**Round :** {round}\n"
+            attendance_text += f"**Round :** {round}\n\n"
+            attendance_text += f"**Results**\n"
+            attendance_text += f"🏆 {winner.display_name} ({winner_score}) Vs ({loser_score}) {loser.display_name} 💀\n\n"
             attendance_text += f"**Staffs**\n"
             attendance_text += f"• Judge: {interaction.user.mention} `@{interaction.user.name}`"
             
@@ -1621,14 +1620,7 @@ async def exchange_judge(
             pass
         add_judge_assignment(new_judge.id, ev_id)
 
-        # Reschedule ten-minute reminder if applicable
-        try:
-            event_channel = None
-            if interaction.guild and data.get('channel_id'):
-                event_channel = interaction.guild.get_channel(data['channel_id'])
-            await schedule_event_reminder_v2(ev_id, data.get('team1_captain', None) or None, data.get('team2_captain', None) or None, new_judge, event_channel)
-        except Exception as e:
-            print(f"Reminder reschedule failed for {ev_id}: {e}")
+        # Judge assigned successfully (reminder system removed)
 
         # Handle channel permissions and send notification to the event channel
         try:
