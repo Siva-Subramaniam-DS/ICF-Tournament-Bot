@@ -695,40 +695,21 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                         font_small = ImageFont.load_default()
                         font_tiny = ImageFont.load_default()
             
-            # Define colors for maximum visibility
+            # Define colors for clean visibility without backgrounds
             text_color = (255, 255, 255)  # Bright white
             outline_color = (0, 0, 0)     # Pure black
-            bg_color = (0, 0, 0, 180)     # Semi-transparent black background
             yellow_color = (255, 255, 0)  # Bright yellow for important text
             
-            # Create a semi-transparent overlay for drawing backgrounds
-            overlay = Image.new('RGBA', poster.size, (0, 0, 0, 0))
-            overlay_draw = ImageDraw.Draw(overlay)
-            
-            # Enhanced helper function with background box for maximum visibility
-            def draw_text_with_background(text, x, y, font, text_color=text_color, bg_color=bg_color, padding=10, use_yellow=False):
+            # Simple helper function with outline only (no background)
+            def draw_text_with_outline(text, x, y, font, text_color=text_color, use_yellow=False):
                 # Convert coordinates to integers
                 x, y = int(x), int(y)
-                
-                # Get text dimensions
-                bbox = draw.textbbox((0, 0), text, font=font)
-                text_width = bbox[2] - bbox[0]
-                text_height = bbox[3] - bbox[1]
-                
-                # Calculate background rectangle
-                bg_x1 = x - padding
-                bg_y1 = y - padding
-                bg_x2 = x + text_width + padding
-                bg_y2 = y + text_height + padding
-                
-                # Draw semi-transparent background rectangle
-                overlay_draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=bg_color)
                 
                 # Choose text color
                 final_text_color = yellow_color if use_yellow else text_color
                 
-                # Draw thick black outline (5 pixels for maximum visibility)
-                outline_width = 5
+                # Draw thick black outline for visibility
+                outline_width = 4
                 for dx in range(-outline_width, outline_width + 1):
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
@@ -737,26 +718,12 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 # Draw main text on top
                 draw.text((x, y), text, font=font, fill=final_text_color)
             
-            def draw_emoji_text_with_background(text, x, y, font, text_color=text_color, bg_color=bg_color, padding=8):
+            def draw_emoji_text_with_outline(text, x, y, font, text_color=text_color):
                 # Convert coordinates to integers
                 x, y = int(x), int(y)
                 
-                # Get text dimensions
-                bbox = draw.textbbox((0, 0), text, font=font)
-                text_width = bbox[2] - bbox[0]
-                text_height = bbox[3] - bbox[1]
-                
-                # Calculate background rectangle
-                bg_x1 = x - padding
-                bg_y1 = y - padding
-                bg_x2 = x + text_width + padding
-                bg_y2 = y + text_height + padding
-                
-                # Draw semi-transparent background rectangle
-                overlay_draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=bg_color)
-                
                 # Draw thick black outline
-                outline_width = 4
+                outline_width = 3
                 for dx in range(-outline_width, outline_width + 1):
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
@@ -770,54 +737,45 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
             server_width = server_bbox[2] - server_bbox[0]
             server_x = (width - server_width) // 2
-            server_y = int(height * 0.05)
-            draw_text_with_background(server_text, server_x, server_y, font_title, padding=15)
+            server_y = int(height * 0.08)  # Moved down slightly
+            draw_text_with_outline(server_text, server_x, server_y, font_title)
             
-            # Add Round text (center) - use yellow for emphasis
+            # Add Round text (center) - use yellow for emphasis with more spacing
             round_text = f"ROUND {round_num}"
             round_bbox = draw.textbbox((0, 0), round_text, font=font_large)
             round_width = round_bbox[2] - round_bbox[0]
             round_x = (width - round_width) // 2
-            round_y = int(height * 0.40)
-            draw_text_with_background(round_text, round_x, round_y, font_large, use_yellow=True, padding=15)
+            round_y = int(height * 0.35)  # More space from top
+            draw_text_with_outline(round_text, round_x, round_y, font_large, use_yellow=True)
             
-            # Add Captain vs Captain text (center)
+            # Add Captain vs Captain text (center) with more spacing
             vs_text = f"{team1_captain} VS {team2_captain}"
             vs_bbox = draw.textbbox((0, 0), vs_text, font=font_medium)
             vs_width = vs_bbox[2] - vs_bbox[0]
             vs_x = (width - vs_width) // 2
-            vs_y = int(height * 0.55)
-            draw_text_with_background(vs_text, vs_x, vs_y, font_medium, padding=12)
+            vs_y = int(height * 0.55)  # More space between round and captains
+            draw_text_with_outline(vs_text, vs_x, vs_y, font_medium)
             
-            # Add date (if provided)
+            # Add date (if provided) with more spacing
             if date_str:
                 date_text = f"📅 {date_str}"
                 date_bbox = draw.textbbox((0, 0), date_text, font=font_small)
                 date_width = date_bbox[2] - date_bbox[0]
                 date_x = (width - date_width) // 2
-                date_y = int(height * 0.68)
-                draw_emoji_text_with_background(date_text, date_x, date_y, font_small)
+                date_y = int(height * 0.72)  # More space between captains and date
+                draw_emoji_text_with_outline(date_text, date_x, date_y, font_small)
             
-            # Add UTC time (bottom center)
+            # Add UTC time with more spacing
             time_text = f"🕐 {utc_time}"
             time_bbox = draw.textbbox((0, 0), time_text, font=font_small)
             time_width = time_bbox[2] - time_bbox[0]
             time_x = (width - time_width) // 2
-            time_y = int(height * 0.78) if date_str else int(height * 0.75)
-            draw_emoji_text_with_background(time_text, time_x, time_y, font_small)
+            time_y = int(height * 0.82) if date_str else int(height * 0.75)  # More space between date and time
+            draw_emoji_text_with_outline(time_text, time_x, time_y, font_small)
             
-            # Add "MATCH SCHEDULED" text at bottom
-            scheduled_text = "MATCH SCHEDULED"
-            scheduled_bbox = draw.textbbox((0, 0), scheduled_text, font=font_tiny)
-            scheduled_width = scheduled_bbox[2] - scheduled_bbox[0]
-            scheduled_x = (width - scheduled_width) // 2
-            scheduled_y = int(height * 0.88)
-            draw_text_with_background(scheduled_text, scheduled_x, scheduled_y, font_tiny, padding=8)
+            # "MATCH SCHEDULED" text removed as requested
             
-            # Composite the overlay with backgrounds onto the poster
-            poster = Image.alpha_composite(poster, overlay)
-            
-            # Save the modified image
+            # Save the modified image (no overlay compositing needed)
             output_path = f"temp_poster_{int(datetime.datetime.now().timestamp())}.png"
             poster.save(output_path, "PNG")
             return output_path
