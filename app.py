@@ -1074,16 +1074,22 @@ async def event_create(
     poster_image = None
     
     if template_image:
-        # Create poster with text overlays
-        poster_image = create_event_poster(
-            template_image, 
-            round, 
-            team_1_captain.display_name, 
-            team_2_captain.display_name, 
-            time_info['utc_time_simple'],
-            f"{date:02d}/{month:02d}/{current_year}",
-            "King of the Seas"
-        )
+        try:
+            # Create poster with text overlays
+            poster_image = create_event_poster(
+                template_image, 
+                round, 
+                team_1_captain.display_name, 
+                team_2_captain.display_name, 
+                time_info['utc_time_simple'],
+                f"{date:02d}/{month:02d}/{current_year}",
+                "King of the Seas"
+            )
+        except Exception as e:
+            print(f"Error creating poster: {e}")
+            poster_image = None
+    else:
+        print("No template images found in Templates folder")
     
     # Create event embed with new format
     embed = discord.Embed(

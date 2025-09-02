@@ -55,8 +55,10 @@ temp_*
 # Google Sheets credentials
 *.json
 
-# Images (if you don't want to track them)
-*.png
-*.jpg
-*.jpeg
-*.gif 
+# Images (exclude temporary files but keep assets)
+temp_*.png
+temp_*.jpg
+temp_*.jpeg
+# Keep logo and templates
+!D1logo.png
+!Templates/ 
