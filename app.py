@@ -439,18 +439,7 @@ async def send_event_reminder(delay: float, event_id: str, team1_captain: discor
     else:
         mentions = f"{team1_captain.mention} {team2_captain.mention}"
     
-    # Send reminder to Take-Schedule channel with mentions
-    try:
-        # Get the bot instance to access guild
-        for guild in bot.guilds:
-            schedule_channel = guild.get_channel(CHANNEL_IDS["take_schedule"])
-            if schedule_channel:
-                await schedule_channel.send(content=mentions, embed=embed)
-                break
-    except Exception as e:
-        print(f"Error sending reminder to Take-Schedule channel: {e}")
-    
-    # Send reminder to the event channel as well
+    # Send reminder only to the event channel (not Take-Schedule channel)
     if event_channel:
         try:
             # Create a slightly different embed for the event channel
@@ -625,20 +614,20 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             
             # Try to load a font, fallback to default if not available
             try:
-                # Try to use larger fonts for better visibility - increased sizes for bigger, bolder appearance
-                font_title = ImageFont.truetype("arialbd.ttf", int(height * 0.08))   # Title font
-                font_large = ImageFont.truetype("arialbd.ttf", int(height * 0.10))   # Round number
-                font_medium = ImageFont.truetype("arialbd.ttf", int(height * 0.07))  # VS text
-                font_small = ImageFont.truetype("arialbd.ttf", int(height * 0.05))   # Time and date
-                font_tiny = ImageFont.truetype("arialbd.ttf", int(height * 0.04))    # Tournament name
+                # Try to use larger fonts for better visibility - much bigger sizes
+                font_title = ImageFont.truetype("arialbd.ttf", int(height * 0.12))   # Title font (bigger)
+                font_large = ImageFont.truetype("arialbd.ttf", int(height * 0.15))   # Round number (bigger)
+                font_medium = ImageFont.truetype("arialbd.ttf", int(height * 0.10))  # VS text (bigger)
+                font_small = ImageFont.truetype("arialbd.ttf", int(height * 0.08))   # Time and date (bigger)
+                font_tiny = ImageFont.truetype("arialbd.ttf", int(height * 0.06))    # Tournament name (bigger)
             except:
                 try:
-                    # Fallback to regular Arial with bigger sizes if bold Arial not available
-                    font_title = ImageFont.truetype("arial.ttf", int(height * 0.08))
-                    font_large = ImageFont.truetype("arial.ttf", int(height * 0.10))
-                    font_medium = ImageFont.truetype("arial.ttf", int(height * 0.07))
-                    font_small = ImageFont.truetype("arial.ttf", int(height * 0.05))
-                    font_tiny = ImageFont.truetype("arial.ttf", int(height * 0.04))
+                    # Fallback to regular Arial with much bigger sizes if bold Arial not available
+                    font_title = ImageFont.truetype("arial.ttf", int(height * 0.12))
+                    font_large = ImageFont.truetype("arial.ttf", int(height * 0.15))
+                    font_medium = ImageFont.truetype("arial.ttf", int(height * 0.10))
+                    font_small = ImageFont.truetype("arial.ttf", int(height * 0.08))
+                    font_tiny = ImageFont.truetype("arial.ttf", int(height * 0.06))
                 except:
                     # Final fallback to default font
                     font_title = ImageFont.load_default()
@@ -1436,6 +1425,104 @@ async def choose(interaction: discord.Interaction, options: str):
     embed.set_footer(text="Random Choice Generator •  😈The Devil's Spot😈")
     
     await interaction.response.send_message(embed=embed)
+
+
+@tree.command(name="event-delete", description="Delete a scheduled event (Head Helper/Helper Team only)")
+async def event_delete(interaction: discord.Interaction):
+    # Check permissions - only Head Helper or Helper Team can delete events
+    head_helper_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_helper"])
+    helper_team_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helper_team"])
+    
+    if not (head_helper_role or helper_team_role):
+        await interaction.response.send_message("❌ You need **Head Helper** or **Helper Team** role to delete events.", ephemeral=True)
+        return
+    
+    try:
+        # Check if there are any scheduled events
+        if not scheduled_events:
+            await interaction.response.send_message("❌ No scheduled events found to delete.", ephemeral=True)
+            return
+        
+        # Create dropdown with event names
+        class EventDeleteView(View):
+            def __init__(self):
+                super().__init__(timeout=60)
+                
+            @discord.ui.select(
+                placeholder="Select an event to delete...",
+                options=[
+                    discord.SelectOption(
+                        label=f"{event_data.get('title', 'Unknown Event')} - {event_data.get('round', 'Unknown Round')}",
+                        description=f"{event_data.get('date_str', 'No date')} at {event_data.get('time_str', 'No time')}",
+                        value=event_id
+                    )
+                    for event_id, event_data in list(scheduled_events.items())[:25]  # Discord limit of 25 options
+                ]
+            )
+            async def select_event(self, select_interaction: discord.Interaction, select: discord.ui.Select):
+                selected_event_id = select.values[0]
+                
+                # Get event details for confirmation
+                event_data = scheduled_events[selected_event_id]
+                
+                # Cancel any scheduled reminders
+                if selected_event_id in reminder_tasks:
+                    reminder_tasks[selected_event_id].cancel()
+                    del reminder_tasks[selected_event_id]
+                
+                # Remove judge assignment if exists
+                if 'judge' in event_data and event_data['judge']:
+                    judge_id = event_data['judge'].id
+                    remove_judge_assignment(judge_id, selected_event_id)
+                
+                # Remove from scheduled events
+                del scheduled_events[selected_event_id]
+                
+                # Create confirmation embed
+                embed = discord.Embed(
+                    title="🗑️ Event Deleted",
+                    description=f"Event has been successfully deleted.",
+                    color=discord.Color.red(),
+                    timestamp=discord.utils.utcnow()
+                )
+                
+                embed.add_field(
+                    name="📋 Deleted Event Details",
+                    value=f"**Title:** {event_data.get('title', 'N/A')}\n**Round:** {event_data.get('round', 'N/A')}\n**Time:** {event_data.get('time_str', 'N/A')}\n**Date:** {event_data.get('date_str', 'N/A')}",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="✅ Actions Completed",
+                    value="• Event removed from schedule\n• Reminder cancelled\n• Judge assignment cleared",
+                    inline=False
+                )
+                
+                embed.set_footer(text="Event Management • 😈The Devil's Spot😈")
+                
+                await select_interaction.response.edit_message(embed=embed, view=None)
+        
+        # Create initial embed
+        embed = discord.Embed(
+            title="🗑️ Delete Event",
+            description="Select an event from the dropdown below to delete it.",
+            color=discord.Color.orange(),
+            timestamp=discord.utils.utcnow()
+        )
+        
+        embed.add_field(
+            name="📋 Available Events",
+            value=f"Found {len(scheduled_events)} scheduled event(s)",
+            inline=False
+        )
+        
+        embed.set_footer(text="Event Management • 😈The Devil's Spot😈")
+        
+        view = EventDeleteView()
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
 
 
 @tree.command(name="exchange_judge", description="Exchange an old judge for a new judge for event(s) in this channel")
