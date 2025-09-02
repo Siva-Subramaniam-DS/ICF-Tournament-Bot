@@ -1,4 +1,4 @@
-# Discord Bot Requirements - Railway Deployment
+# Discord Bot Requirements - Optimized for Railway Deployment
 
 # Core Discord library
 discord.py>=2.3.0
@@ -6,26 +6,15 @@ discord.py>=2.3.0
 # Environment variable management
 python-dotenv>=1.0.0
 
-# Data handling and utilities
-pandas>=2.0.0
-numpy>=1.24.0
-
-# HTTP requests (if needed for external APIs)
-aiohttp>=3.8.0
-requests>=2.31.0
-
 # Date and time utilities
-python-dateutil>=2.8.0
 pytz>=2023.3
 
-# Image processing (for enhanced image utilities)
+# Image processing (lightweight)
 Pillow>=10.0.0
 
-# Async utilities
-asyncio-throttle>=1.0.0
-
-# Logging enhancements
-colorlog>=6.7.0
-
-# Railway deployment requirements
-gunicorn>=21.0.0
+# Essential only - removed heavy dependencies that might cause timeout:
+# - pandas (large dependency)
+# - numpy (large dependency) 
+# - asyncio-throttle (not essential)
+# - colorlog (not essential)
+# - gunicorn (not needed for Discord bots)

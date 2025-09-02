@@ -858,13 +858,17 @@ async def on_ready():
     # Load scheduled events from file
     load_scheduled_events()
     
-    # Sync commands
+    # Sync commands with timeout handling
     try:
         print("🔄 Syncing slash commands...")
-        synced = await tree.sync()
+        import asyncio
+        synced = await asyncio.wait_for(tree.sync(), timeout=30.0)
         print(f"✅ Synced {len(synced)} command(s)")
+    except asyncio.TimeoutError:
+        print("⚠️ Command sync timed out, but bot will continue running")
     except Exception as e:
         print(f"❌ Error syncing commands: {e}")
+        print("⚠️ Bot will continue running without command sync")
     
     print("🎯 Bot is ready to receive commands!")
 
@@ -1073,7 +1077,7 @@ async def event_create(
         name="📋 Event Details", 
         value=f"**Tournament:** King of the Seas\n"
               f"**UTC Time:** {time_info['utc_time']}\n"
-              f"**Local Time:** ``{time_info['local_time']}``\n"
+              f"**Local Time:** {time_info['local_time']}\n"
               f"**Round:** Round {round}\n"
               f"**Channel:** {interaction.channel.mention}",
         inline=False
@@ -1170,7 +1174,11 @@ async def event_create(
     ss_4="Screenshot 4 (upload)",
     ss_5="Screenshot 5 (upload)",
     ss_6="Screenshot 6 (upload)",
-    ss_7="Screenshot 7 (upload)"
+    ss_7="Screenshot 7 (upload)",
+    ss_8="Screenshot 8 (upload)",
+    ss_9="Screenshot 9 (upload)",
+    ss_10="Screenshot 10 (upload)",
+    ss_11="Screenshot 11 (upload)"
 )
 async def event_result(
     interaction: discord.Interaction,
@@ -1187,7 +1195,11 @@ async def event_result(
     ss_4: discord.Attachment = None,
     ss_5: discord.Attachment = None,
     ss_6: discord.Attachment = None,
-    ss_7: discord.Attachment = None
+    ss_7: discord.Attachment = None,
+    ss_8: discord.Attachment = None,
+    ss_9: discord.Attachment = None,
+    ss_10: discord.Attachment = None,
+    ss_11: discord.Attachment = None
 ):
     """Adds results for an event"""
     
@@ -1234,7 +1246,7 @@ async def event_result(
     embed.add_field(name="📝 Remarks", value=remarks, inline=False)
     
     # Handle screenshots - collect them and send as files (no image embeds)
-    screenshots = [ss_1, ss_2, ss_3, ss_4, ss_5, ss_6, ss_7]
+    screenshots = [ss_1, ss_2, ss_3, ss_4, ss_5, ss_6, ss_7, ss_8, ss_9, ss_10, ss_11]
     files_to_send = []
     screenshot_names = []
     
@@ -1690,8 +1702,14 @@ if __name__ == "__main__":
     
     try:
         print("🚀 Starting Discord bot...")
-        bot.run(token)
+        print("📡 Connecting to Discord...")
+        bot.run(token, log_handler=None)  # Disable default logging to reduce startup time
     except discord.LoginFailure:
         print("❌ Invalid Discord token. Please check your bot token.")
+        exit(1)
+    except discord.HTTPException as e:
+        print(f"❌ HTTP error connecting to Discord: {e}")
+        exit(1)
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
+        exit(1)
