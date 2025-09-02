@@ -20,7 +20,8 @@ pytz>=2023.3
 
 # Image processing (for enhanced image utilities)
 Pillow>=10.0.0
-pilmoji>=2.0.4
+pilmoji==2.0.2
+emoji==1.7.0
 
 # Async utilities
 asyncio-throttle>=1.0.0
