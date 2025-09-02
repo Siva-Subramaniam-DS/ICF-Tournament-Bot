@@ -765,52 +765,13 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 # Draw main text on top
                 draw.text((x, y), text, font=font, fill=text_color)
             
-            # Add server logo (top center)
-            try:
-                logo_path = "D1logo.png"
-                if os.path.exists(logo_path):
-                    with Image.open(logo_path) as logo_img:
-                        # Convert logo to RGBA if needed
-                        if logo_img.mode != 'RGBA':
-                            logo_img = logo_img.convert('RGBA')
-                        
-                        # Calculate logo size (about 25% of poster height - bigger)
-                        logo_size = int(height * 0.25)
-                        
-                        # Resize logo while maintaining aspect ratio
-                        logo_ratio = logo_img.width / logo_img.height
-                        if logo_ratio > 1:  # Wider than tall
-                            logo_width = logo_size
-                            logo_height = int(logo_size / logo_ratio)
-                        else:  # Taller than wide
-                            logo_height = logo_size
-                            logo_width = int(logo_size * logo_ratio)
-                        
-                        logo_img = logo_img.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
-                        
-                        # Calculate position (center horizontally, top area)
-                        logo_x = (width - logo_width) // 2
-                        logo_y = int(height * 0.05)
-                        
-                        # Paste logo onto poster
-                        poster.paste(logo_img, (logo_x, logo_y), logo_img)
-                else:
-                    # Fallback to text if logo not found
-                    server_text = server_name
-                    server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
-                    server_width = server_bbox[2] - server_bbox[0]
-                    server_x = (width - server_width) // 2
-                    server_y = int(height * 0.05)
-                    draw_emoji_text_with_background(server_text, server_x, server_y, font_title)
-            except Exception as e:
-                print(f"Error adding logo: {e}")
-                # Fallback to text if logo fails
-                server_text = server_name
-                server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
-                server_width = server_bbox[2] - server_bbox[0]
-                server_x = (width - server_width) // 2
-                server_y = int(height * 0.05)
-                draw_emoji_text_with_background(server_text, server_x, server_y, font_title)
+            # Add server name text (top center, bold)
+            server_text = server_name
+            server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
+            server_width = server_bbox[2] - server_bbox[0]
+            server_x = (width - server_width) // 2
+            server_y = int(height * 0.05)
+            draw_text_with_background(server_text, server_x, server_y, font_title, padding=15)
             
             # Add Round text (center) - use yellow for emphasis
             round_text = f"ROUND {round_num}"
@@ -1257,9 +1218,13 @@ async def event_create(
             if poster_image:
                 with open(poster_image, 'rb') as f:
                     file = discord.File(f, filename="event_poster.png")
-                    await schedule_channel.send(content=judge_ping, embed=embed, file=file, view=take_schedule_view)
+                    schedule_message = await schedule_channel.send(content=judge_ping, embed=embed, file=file, view=take_schedule_view)
             else:
-                await schedule_channel.send(content=judge_ping, embed=embed, view=take_schedule_view)
+                schedule_message = await schedule_channel.send(content=judge_ping, embed=embed, view=take_schedule_view)
+            
+            # Store the message ID for later deletion
+            scheduled_events[event_id]['schedule_message_id'] = schedule_message.id
+            scheduled_events[event_id]['schedule_channel_id'] = schedule_channel.id
         else:
             await interaction.followup.send("⚠️ Could not find Take-Schedule channel.", ephemeral=True)
     except Exception as e:
@@ -1595,6 +1560,29 @@ async def event_delete(interaction: discord.Interaction):
                     judge_id = event_data['judge'].id
                     remove_judge_assignment(judge_id, selected_event_id)
                 
+                # Delete the original schedule message if it exists
+                deleted_message = False
+                if 'schedule_message_id' in event_data and 'schedule_channel_id' in event_data:
+                    try:
+                        schedule_channel = select_interaction.guild.get_channel(event_data['schedule_channel_id'])
+                        if schedule_channel:
+                            schedule_message = await schedule_channel.fetch_message(event_data['schedule_message_id'])
+                            await schedule_message.delete()
+                            deleted_message = True
+                    except discord.NotFound:
+                        pass  # Message already deleted
+                    except Exception as e:
+                        print(f"Error deleting schedule message: {e}")
+                
+                # Clean up any temporary poster files
+                if 'poster_path' in event_data:
+                    try:
+                        import os
+                        if os.path.exists(event_data['poster_path']):
+                            os.remove(event_data['poster_path'])
+                    except Exception as e:
+                        print(f"Error deleting poster file: {e}")
+                
                 # Remove from scheduled events
                 del scheduled_events[selected_event_id]
                 
@@ -1615,9 +1603,22 @@ async def event_delete(interaction: discord.Interaction):
                     inline=False
                 )
                 
+                # Build actions completed list
+                actions_completed = [
+                    "• Event removed from schedule",
+                    "• Reminder cancelled",
+                    "• Judge assignment cleared"
+                ]
+                
+                if deleted_message:
+                    actions_completed.append("• Original schedule message deleted")
+                
+                if 'poster_path' in event_data:
+                    actions_completed.append("• Temporary poster file cleaned up")
+                
                 embed.add_field(
                     name="✅ Actions Completed",
-                    value="• Event removed from schedule\n• Reminder cancelled\n• Judge assignment cleared",
+                    value="\n".join(actions_completed),
                     inline=False
                 )
                 
