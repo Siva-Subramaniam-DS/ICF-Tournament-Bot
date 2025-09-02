@@ -696,35 +696,67 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                         font_tiny = ImageFont.load_default()
             
             # Define colors for maximum visibility
-            text_color = (255, 255, 255)  # White
-            outline_color = (0, 0, 0)     # Black
-            shadow_color = (64, 64, 64)   # Dark gray for shadow
+            text_color = (255, 255, 255)  # Bright white
+            outline_color = (0, 0, 0)     # Pure black
+            bg_color = (0, 0, 0, 180)     # Semi-transparent black background
+            yellow_color = (255, 255, 0)  # Bright yellow for important text
             
-            # Enhanced helper function to draw text with outline and shadow for maximum visibility
-            def draw_text_with_outline(text, x, y, font, text_color, outline_color, outline_width=3):
+            # Create a semi-transparent overlay for drawing backgrounds
+            overlay = Image.new('RGBA', poster.size, (0, 0, 0, 0))
+            overlay_draw = ImageDraw.Draw(overlay)
+            
+            # Enhanced helper function with background box for maximum visibility
+            def draw_text_with_background(text, x, y, font, text_color=text_color, bg_color=bg_color, padding=10, use_yellow=False):
                 # Convert coordinates to integers
                 x, y = int(x), int(y)
                 
-                # Draw shadow first (offset by 2 pixels)
-                draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+                # Get text dimensions
+                bbox = draw.textbbox((0, 0), text, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
                 
-                # Draw thick outline for better visibility
+                # Calculate background rectangle
+                bg_x1 = x - padding
+                bg_y1 = y - padding
+                bg_x2 = x + text_width + padding
+                bg_y2 = y + text_height + padding
+                
+                # Draw semi-transparent background rectangle
+                overlay_draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=bg_color)
+                
+                # Choose text color
+                final_text_color = yellow_color if use_yellow else text_color
+                
+                # Draw thick black outline (5 pixels for maximum visibility)
+                outline_width = 5
                 for dx in range(-outline_width, outline_width + 1):
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
                             draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
                 
                 # Draw main text on top
-                draw.text((x, y), text, font=font, fill=text_color)
+                draw.text((x, y), text, font=font, fill=final_text_color)
             
-            def draw_emoji_text_with_outline(text, x, y, font, text_color, outline_color, outline_width=3):
+            def draw_emoji_text_with_background(text, x, y, font, text_color=text_color, bg_color=bg_color, padding=8):
                 # Convert coordinates to integers
                 x, y = int(x), int(y)
                 
-                # Draw shadow first (offset by 2 pixels)
-                draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+                # Get text dimensions
+                bbox = draw.textbbox((0, 0), text, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
                 
-                # Draw thick outline for better visibility (emojis will display as unicode text)
+                # Calculate background rectangle
+                bg_x1 = x - padding
+                bg_y1 = y - padding
+                bg_x2 = x + text_width + padding
+                bg_y2 = y + text_height + padding
+                
+                # Draw semi-transparent background rectangle
+                overlay_draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=bg_color)
+                
+                # Draw thick black outline
+                outline_width = 4
                 for dx in range(-outline_width, outline_width + 1):
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
@@ -769,7 +801,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                     server_width = server_bbox[2] - server_bbox[0]
                     server_x = (width - server_width) // 2
                     server_y = int(height * 0.05)
-                    draw_emoji_text_with_outline(server_text, server_x, server_y, font_title, text_color, outline_color)
+                    draw_emoji_text_with_background(server_text, server_x, server_y, font_title)
             except Exception as e:
                 print(f"Error adding logo: {e}")
                 # Fallback to text if logo fails
@@ -778,15 +810,15 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 server_width = server_bbox[2] - server_bbox[0]
                 server_x = (width - server_width) // 2
                 server_y = int(height * 0.05)
-                draw_emoji_text_with_outline(server_text, server_x, server_y, font_title, text_color, outline_color)
+                draw_emoji_text_with_background(server_text, server_x, server_y, font_title)
             
-            # Add Round text (center)
+            # Add Round text (center) - use yellow for emphasis
             round_text = f"ROUND {round_num}"
             round_bbox = draw.textbbox((0, 0), round_text, font=font_large)
             round_width = round_bbox[2] - round_bbox[0]
             round_x = (width - round_width) // 2
             round_y = int(height * 0.40)
-            draw_text_with_outline(round_text, round_x, round_y, font_large, text_color, outline_color)
+            draw_text_with_background(round_text, round_x, round_y, font_large, use_yellow=True, padding=15)
             
             # Add Captain vs Captain text (center)
             vs_text = f"{team1_captain} VS {team2_captain}"
@@ -794,7 +826,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             vs_width = vs_bbox[2] - vs_bbox[0]
             vs_x = (width - vs_width) // 2
             vs_y = int(height * 0.55)
-            draw_text_with_outline(vs_text, vs_x, vs_y, font_medium, text_color, outline_color)
+            draw_text_with_background(vs_text, vs_x, vs_y, font_medium, padding=12)
             
             # Add date (if provided)
             if date_str:
@@ -803,7 +835,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 date_width = date_bbox[2] - date_bbox[0]
                 date_x = (width - date_width) // 2
                 date_y = int(height * 0.68)
-                draw_emoji_text_with_outline(date_text, date_x, date_y, font_small, text_color, outline_color, 1)
+                draw_emoji_text_with_background(date_text, date_x, date_y, font_small)
             
             # Add UTC time (bottom center)
             time_text = f"🕐 {utc_time}"
@@ -811,7 +843,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             time_width = time_bbox[2] - time_bbox[0]
             time_x = (width - time_width) // 2
             time_y = int(height * 0.78) if date_str else int(height * 0.75)
-            draw_emoji_text_with_outline(time_text, time_x, time_y, font_small, text_color, outline_color, 1)
+            draw_emoji_text_with_background(time_text, time_x, time_y, font_small)
             
             # Add "MATCH SCHEDULED" text at bottom
             scheduled_text = "MATCH SCHEDULED"
@@ -819,7 +851,10 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             scheduled_width = scheduled_bbox[2] - scheduled_bbox[0]
             scheduled_x = (width - scheduled_width) // 2
             scheduled_y = int(height * 0.88)
-            draw_text_with_outline(scheduled_text, scheduled_x, scheduled_y, font_tiny, text_color, outline_color, 1)
+            draw_text_with_background(scheduled_text, scheduled_x, scheduled_y, font_tiny, padding=8)
+            
+            # Composite the overlay with backgrounds onto the poster
+            poster = Image.alpha_composite(poster, overlay)
             
             # Save the modified image
             output_path = f"temp_poster_{int(datetime.datetime.now().timestamp())}.png"
