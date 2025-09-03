@@ -421,100 +421,27 @@ class TakeScheduleButton(View):
         except Exception as e:
             print(f"Error sending judge release notification: {e}")
 
-async def schedule_event_reminder(event_id: str, team1_captain: discord.Member, team2_captain: discord.Member, judge: Optional[discord.Member] = None, event_channel: discord.TextChannel = None):
-    """Schedule a reminder 10 minutes before the event"""
-    # Get event details from scheduled_events
-    if event_id in scheduled_events:
-        event_data = scheduled_events[event_id]
-        event_time = event_data['datetime']
-        
-        # Avoid scheduling multiple reminders for the same event
-        if event_data.get('reminder_scheduled'):
-            return
-        
-        # Calculate reminder time (10 minutes before)
-        reminder_time = event_time - datetime.timedelta(minutes=10)
-        current_time = datetime.datetime.now()
-        
-        if reminder_time > current_time:
-            # Calculate delay in seconds
-            delay = (reminder_time - current_time).total_seconds()
-            
-            # Schedule the reminder
-            asyncio.create_task(send_event_reminder(delay, event_id, team1_captain, team2_captain, judge, event_data, event_channel))
-            # Mark as scheduled
-            event_data['reminder_scheduled'] = True
 
-async def send_event_reminder(delay: float, event_id: str, team1_captain: discord.Member, team2_captain: discord.Member, judge: Optional[discord.Member], event_data: dict, event_channel: discord.TextChannel = None):
-    """Send reminder to both Take-Schedule channel and event channel with mentions"""
-    await asyncio.sleep(delay)
-    
-    embed = discord.Embed(
-        title="⏰ Event Reminder",
-        description="**Event starts in 10 minutes!**",
-        color=discord.Color.orange(),
-        timestamp=discord.utils.utcnow()
-    )
-    
-    embed.add_field(name="🏆 Event", value=event_data.get('title', 'Tournament Match'), inline=False)
-    embed.add_field(name="👑 Team 1 Captain", value=team1_captain.mention, inline=True)
-    embed.add_field(name="👑 Team 2 Captain", value=team2_captain.mention, inline=True)
-    # Resolve judge at send time if updated in event_data
-    resolved_judge = event_data.get('judge') or judge
-    if resolved_judge:
-        embed.add_field(name="👨‍⚖️ Judge", value=resolved_judge.mention, inline=True)
-    embed.add_field(name="🕐 Time", value=event_data.get('time_str', ''), inline=True)
-    embed.add_field(name="📅 Date", value=event_data.get('date_str', ''), inline=True)
-    embed.add_field(name="🏆 Round", value=event_data.get('round', ''), inline=True)
-    
-    embed.set_footer(text="Event Reminder • 😈The Devil's Spot😈")
-    
-    # Create mention string for Team Captains and Judge only
-    if resolved_judge:
-        mentions = f"{team1_captain.mention} {team2_captain.mention} {resolved_judge.mention}"
-    else:
-        mentions = f"{team1_captain.mention} {team2_captain.mention}"
-    
-    # Send reminder only to the event channel (not Take-Schedule channel)
-    if event_channel:
-        try:
-            # Create a slightly different embed for the event channel
-            event_embed = discord.Embed(
-                title="⏰ Match Starting Soon!",
-                description="**Your match starts in 10 minutes!**\n\nPlease get ready and join the match.",
-                color=discord.Color.red(),
-                timestamp=discord.utils.utcnow()
-            )
-            
-            event_embed.add_field(name="🏆 Tournament", value=event_data.get('tournament', 'Tournament'), inline=True)
-            event_embed.add_field(name="🏆 Round", value=event_data.get('round', ''), inline=True)
-            event_embed.add_field(name="🕐 Start Time", value=event_data.get('time_str', ''), inline=True)
-            
-            if resolved_judge:
-                participants_value = f"**Team 1:** {team1_captain.mention}\n**Team 2:** {team2_captain.mention}\n**Judge:** {resolved_judge.mention}"
-            else:
-                participants_value = f"**Team 1:** {team1_captain.mention}\n**Team 2:** {team2_captain.mention}"
-            event_embed.add_field(name="👥 Participants", value=participants_value, inline=False)
-            
 
-            
-            event_embed.set_footer(text="Match Reminder • 😈The Devil's Spot😈")
-            
-            await event_channel.send(content=mentions, embed=event_embed)
-            
-        except Exception as e:
-            print(f"Error sending reminder to event channel: {e}")
+
 
 # ===========================================================================================
 # NOTIFICATION AND REMINDER SYSTEM (Ten-minute reminder for captains and judge)
 # ===========================================================================================
 
-async def send_ten_minute_reminder(event_id: str, team1_captain: discord.Member, team2_captain: discord.Member, judge: discord.Member, event_channel: discord.TextChannel, match_time: datetime.datetime):
+async def send_ten_minute_reminder(event_id: str, team1_captain: discord.Member, team2_captain: discord.Member, judge: Optional[discord.Member], event_channel: discord.TextChannel, match_time: datetime.datetime):
     """Send 10-minute reminder notification to judge and captains"""
     try:
         if not event_channel:
             print(f"No event channel provided for event {event_id}")
             return
+
+        # Get the latest judge from scheduled_events if available
+        resolved_judge = judge
+        if event_id in scheduled_events:
+            stored_judge = scheduled_events[event_id].get('judge')
+            if stored_judge:
+                resolved_judge = stored_judge
 
         # Create reminder embed
         embed = discord.Embed(
@@ -525,15 +452,15 @@ async def send_ten_minute_reminder(event_id: str, team1_captain: discord.Member,
         )
         embed.add_field(name="🕒 Match Time", value=f"<t:{int(match_time.timestamp())}:F>", inline=False)
         embed.add_field(name="👥 Team Captains", value=f"{team1_captain.mention} vs {team2_captain.mention}", inline=False)
-        if judge:
-            embed.add_field(name="👨‍⚖️ Judge", value=f"{judge.mention}", inline=False)
-        embed.add_field(name="📋 Action Required", value="Please prepare for the match and join the designated channel.", inline=False)
+        if resolved_judge:
+            embed.add_field(name="👨‍⚖️ Judge", value=f"{resolved_judge.mention}", inline=False)
+        embed.add_field(name="� ActAion Required", value="Please prepare for the match and join the designated channel.", inline=False)
         embed.set_footer(text="Tournament Management System")
 
         # Send notification with pings
         pings = f"{team1_captain.mention} {team2_captain.mention}"
-        if judge:
-            pings = f"{judge.mention} " + pings
+        if resolved_judge:
+            pings = f"{resolved_judge.mention} " + pings
         notification_text = f"🔔 **MATCH REMINDER**\n\n{pings}\n\nYour match starts in **10 minutes**!"
 
         await event_channel.send(content=notification_text, embed=embed)
@@ -542,7 +469,7 @@ async def send_ten_minute_reminder(event_id: str, team1_captain: discord.Member,
         print(f"Error sending 10-minute reminder for event {event_id}: {e}")
 
 
-async def schedule_ten_minute_reminder(event_id: str, team1_captain: discord.Member, team2_captain: discord.Member, judge: discord.Member, event_channel: discord.TextChannel, match_time: datetime.datetime):
+async def schedule_ten_minute_reminder(event_id: str, team1_captain: discord.Member, team2_captain: discord.Member, judge: Optional[discord.Member], event_channel: discord.TextChannel, match_time: datetime.datetime):
     """Schedule a 10-minute reminder for the match"""
     try:
         # Calculate when to send the 10-minute reminder
@@ -582,7 +509,7 @@ async def schedule_ten_minute_reminder(event_id: str, team1_captain: discord.Mem
         print(f"Error scheduling 10-minute reminder for event {event_id}: {e}")
 
 
-async def schedule_event_reminder_v2(event_id: str, team1_captain: discord.Member, team2_captain: discord.Member, judge: discord.Member, event_channel: discord.TextChannel):
+async def schedule_event_reminder_v2(event_id: str, team1_captain: discord.Member, team2_captain: discord.Member, judge: Optional[discord.Member], event_channel: discord.TextChannel):
     """Schedule event reminder with 10-minute notification using stored event datetime"""
     try:
         if event_id not in scheduled_events:
@@ -1152,7 +1079,9 @@ async def event_create(
         else:
             await interaction.channel.send(embed=embed)
 
-        # Event created successfully (reminder system removed)
+        # Schedule the 10-minute reminder
+        await schedule_ten_minute_reminder(event_id, team_1_captain, team_2_captain, None, interaction.channel, event_datetime)
+        
     except Exception as e:
         await interaction.followup.send(f"⚠️ Could not post in current channel: {e}", ephemeral=True)
 
