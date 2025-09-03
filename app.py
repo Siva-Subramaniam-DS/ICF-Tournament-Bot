@@ -901,7 +901,7 @@ async def event(interaction: discord.Interaction, action: app_commands.Choice[st
     date="Date of the event",
     month="Month of the event",
     round="Round number",
-    
+    tournament="Tournament name (e.g. King of the Seas, Summer Cup, etc.)"
 )
 async def event_create(
     interaction: discord.Interaction,
@@ -911,7 +911,8 @@ async def event_create(
     minute: int,
     date: int,
     month: int,
-    round: int
+    round: int,
+    tournament: str
 ):
     """Creates an event with the specified parameters"""
     
@@ -958,7 +959,7 @@ async def event_create(
         'date_str': f"{date:02d}/{month:02d}",
         'round': f"Round {round}",
         'minutes_left': time_info['minutes_remaining'],
-        'tournament': 'King of the Seas',
+        'tournament': tournament,
         'judge': None,
         'channel_id': interaction.channel.id,
         'team1_captain': team_1_captain,
@@ -982,7 +983,7 @@ async def event_create(
                 team_2_captain.display_name, 
                 time_info['utc_time_simple'],
                 f"{date:02d}/{month:02d}/{current_year}",
-                "King of the Seas"
+                tournament
             )
         except Exception as e:
             print(f"Error creating poster: {e}")
@@ -1003,7 +1004,7 @@ async def event_create(
     timestamp = int(event_datetime.timestamp())
     embed.add_field(
         name="📋 Event Details", 
-        value=f"**Tournament:** King of the Seas\n"
+        value=f"**Tournament:** {tournament}\n"
               f"**UTC Time:** {time_info['utc_time']}\n"
               f"**Local Time:** <t:{timestamp}:F>\n"
               f"**Round:** Round {round}\n"
