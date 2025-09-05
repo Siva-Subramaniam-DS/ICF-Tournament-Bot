@@ -1006,7 +1006,7 @@ async def event_create(
         name="📋 Event Details", 
         value=f"**Tournament:** {tournament}\n"
               f"**UTC Time:** {time_info['utc_time']}\n"
-              f"**Local Time:** <t:{timestamp}:F>\n"
+              f"**Local Time:** <t:{timestamp}:F> (<t:{timestamp}:R>)\n"
               f"**Round:** Round {round}\n"
               f"**Channel:** {interaction.channel.mention}",
         inline=False
@@ -1386,8 +1386,8 @@ async def event_delete(interaction: discord.Interaction):
                 placeholder="Select an event to delete...",
                 options=[
                     discord.SelectOption(
-                        label=f"{event_data.get('title', 'Unknown Event')} - {event_data.get('round', 'Unknown Round')}",
-                        description=f"{event_data.get('date_str', 'No date')} at {event_data.get('time_str', 'No time')}",
+                        label=f"{event_data.get('team1_captain').display_name if event_data.get('team1_captain') else 'Unknown'} VS {event_data.get('team2_captain').display_name if event_data.get('team2_captain') else 'Unknown'}",
+                        description=f"{event_data.get('round', 'Unknown Round')} - {event_data.get('date_str', 'No date')} at {event_data.get('time_str', 'No time')}",
                         value=event_id
                     )
                     for event_id, event_data in list(scheduled_events.items())[:25]  # Discord limit of 25 options
