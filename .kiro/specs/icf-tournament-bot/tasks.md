@@ -5,6 +5,8 @@
 **Status:** Ready for implementation with current ICF Tournament Bot configuration
 
 - [ ] 1. Refactor and modularize existing codebase structure
+
+
   - Extract tournament management logic from app.py into dedicated modules
   - Create separate modules for judge management, rule management, and notification systems
   - Implement proper separation of concerns following the design architecture

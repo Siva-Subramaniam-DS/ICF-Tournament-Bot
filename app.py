@@ -864,9 +864,10 @@ def calculate_time_difference(event_datetime: datetime.datetime, user_timezone: 
     }
 
 def has_event_create_permission(interaction):
-    """Check if user has permission to create events (Organizers only)"""
+    """Check if user has permission to create events (Organizers or Helpers Tournament)"""
     organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
-    return organizers_role is not None
+    helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
+    return organizers_role is not None or helpers_role is not None
 
 def has_event_result_permission(interaction):
     """Check if user has permission to post event results (Organizers or Helpers Tournament)"""
@@ -1043,7 +1044,7 @@ async def event(interaction: discord.Interaction, action: app_commands.Choice[st
     """Base event command - this will be handled by subcommands"""
     await interaction.response.send_message(f"Please use `/event {action.value}` with the appropriate parameters.", ephemeral=True)
 
-@tree.command(name="event-create", description="Creates an event (Organizers only)")
+@tree.command(name="event-create", description="Creates an event (Organizers/Helpers Tournament)")
 @app_commands.describe(
     team_1_captain="Captain of team 1",
     team_2_captain="Captain of team 2", 
@@ -1426,7 +1427,8 @@ async def choose(interaction: discord.Interaction, options: str):
         "Stone Peaks",
         "Viking Bay",
         "Greenlands",
-        "Old Storm"
+        "Old Storm",
+        "Rising Fortress "
     ]
     
     # Check if input is a number (for map selection)
@@ -1768,3 +1770,123 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
         exit(1)
+
+@tree.command(name="general_tie_breaker", description="To break a tie between two teams using the highest total score")
+@app_commands.describe(
+    tm1_name="Name of the first team. By default, it is Alpha",
+    tm1_pl1_score="Score of the first player of the first team",
+    tm1_pl2_score="Score of the second player of the first team", 
+    tm1_pl3_score="Score of the third player of the first team",
+    tm1_pl4_score="Score of the fourth player of the first team",
+    tm1_pl5_score="Score of the fifth player of the first team",
+    tm2_name="Name of the second team. By default, it is Bravo",
+    tm2_pl1_score="Score of the first player of the second team",
+    tm2_pl2_score="Score of the second player of the second team",
+    tm2_pl3_score="Score of the third player of the second team",
+    tm2_pl4_score="Score of the fourth player of the second team",
+    tm2_pl5_score="Score of the fifth player of the second team"
+)
+async def general_tie_breaker(
+    interaction: discord.Interaction,
+    tm1_pl1_score: int,
+    tm1_pl2_score: int,
+    tm1_pl3_score: int,
+    tm1_pl4_score: int,
+    tm1_pl5_score: int,
+    tm2_pl1_score: int,
+    tm2_pl2_score: int,
+    tm2_pl3_score: int,
+    tm2_pl4_score: int,
+    tm2_pl5_score: int,
+    tm1_name: str = "Alpha",
+    tm2_name: str = "Bravo"
+):
+    """Break a tie between two teams using the highest total score"""
+    
+    # Check permissions - only organizers and helpers can use this command
+    if not has_event_create_permission(interaction):
+        await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to use tie breaker.", ephemeral=True)
+        return
+    
+    # Calculate team totals
+    tm1_total = tm1_pl1_score + tm1_pl2_score + tm1_pl3_score + tm1_pl4_score + tm1_pl5_score
+    tm2_total = tm2_pl1_score + tm2_pl2_score + tm2_pl3_score + tm2_pl4_score + tm2_pl5_score
+    
+    # Determine winner
+    if tm1_total > tm2_total:
+        winner = tm1_name
+        winner_total = tm1_total
+        loser = tm2_name
+        loser_total = tm2_total
+        color = discord.Color.green()
+    elif tm2_total > tm1_total:
+        winner = tm2_name
+        winner_total = tm2_total
+        loser = tm1_name
+        loser_total = tm1_total
+        color = discord.Color.green()
+    else:
+        # Still tied
+        winner = "TIE"
+        winner_total = tm1_total
+        loser = ""
+        loser_total = tm2_total
+        color = discord.Color.orange()
+    
+    # Create result embed
+    embed = discord.Embed(
+        title="🏆 Tie Breaker Results",
+        description="Results based on highest total team score",
+        color=color,
+        timestamp=discord.utils.utcnow()
+    )
+    
+    # Team 1 scores
+    embed.add_field(
+        name=f"🔵 {tm1_name} Team",
+        value=f"Player 1: `{tm1_pl1_score}`\n"
+              f"Player 2: `{tm1_pl2_score}`\n"
+              f"Player 3: `{tm1_pl3_score}`\n"
+              f"Player 4: `{tm1_pl4_score}`\n"
+              f"Player 5: `{tm1_pl5_score}`\n"
+              f"**Total: {tm1_total}**",
+        inline=True
+    )
+    
+    # Team 2 scores
+    embed.add_field(
+        name=f"🔴 {tm2_name} Team",
+        value=f"Player 1: `{tm2_pl1_score}`\n"
+              f"Player 2: `{tm2_pl2_score}`\n"
+              f"Player 3: `{tm2_pl3_score}`\n"
+              f"Player 4: `{tm2_pl4_score}`\n"
+              f"Player 5: `{tm2_pl5_score}`\n"
+              f"**Total: {tm2_total}**",
+        inline=True
+    )
+    
+    # Add spacing
+    embed.add_field(name="\u200b", value="\u200b", inline=False)
+    
+    # Result
+    if winner == "TIE":
+        embed.add_field(
+            name="🤝 Final Result",
+            value=f"**STILL TIED!**\n"
+                  f"Both teams scored {tm1_total} points\n"
+                  f"Additional tie-breaking method needed",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="🏆 Winner",
+            value=f"**{winner}** wins the tie breaker!\n"
+                  f"**{winner}**: {winner_total} points\n"
+                  f"**{loser}**: {loser_total} points\n"
+                  f"Difference: {abs(winner_total - loser_total)} points",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"Tie Breaker • Calculated by {interaction.user.display_name}")
+    
+    await interaction.response.send_message(embed=embed)
