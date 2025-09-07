@@ -97,6 +97,68 @@ reminder_tasks = {}
 # Store judge assignments to prevent overloading
 judge_assignments = {}  # {judge_id: [event_ids]}
 
+# ===========================================================================================
+# RULE MANAGEMENT SYSTEM
+# ===========================================================================================
+
+# Store tournament rules in memory
+tournament_rules = {}
+
+def load_rules():
+    """Load rules from persistent storage"""
+    global tournament_rules
+    try:
+        if os.path.exists('tournament_rules.json'):
+            with open('tournament_rules.json', 'r', encoding='utf-8') as f:
+                tournament_rules = json.load(f)
+                print(f"Loaded tournament rules from file")
+        else:
+            tournament_rules = {}
+            print("No existing rules file found, starting with empty rules")
+    except Exception as e:
+        print(f"Error loading tournament rules: {e}")
+        tournament_rules = {}
+
+def save_rules():
+    """Save rules to persistent storage"""
+    try:
+        with open('tournament_rules.json', 'w', encoding='utf-8') as f:
+            json.dump(tournament_rules, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"Error saving tournament rules: {e}")
+        return False
+
+def get_current_rules():
+    """Get current rules content"""
+    return tournament_rules.get('rules', {}).get('content', '')
+
+def set_rules_content(content, user_id, username):
+    """Set new rules content with metadata"""
+    global tournament_rules
+    
+    # Sanitize content (basic cleanup)
+    if content:
+        content = content.strip()
+    
+    # Update rules with metadata
+    tournament_rules['rules'] = {
+        'content': content,
+        'last_updated': datetime.datetime.utcnow().isoformat(),
+        'updated_by': {
+            'user_id': user_id,
+            'username': username
+        },
+        'version': tournament_rules.get('rules', {}).get('version', 0) + 1
+    }
+    
+    return save_rules()
+
+def has_organizer_permission(interaction):
+    """Check if user has organizer permissions for rule management"""
+    head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
+    return head_organizer_role is not Nonee is not None
+
 # Embed field utility functions for safe Discord.py embed manipulation
 def find_field_index(embed: discord.Embed, field_name: str) -> int:
     """Find the index of a field by name. Returns -1 if not found."""
@@ -427,6 +489,122 @@ class TakeScheduleButton(View):
 
 
 
+
+# ===========================================================================================
+# RULE MANAGEMENT UI COMPONENTS
+# ===========================================================================================
+
+class RuleInputModal(discord.ui.Modal):
+    """Modal for entering/editing rule content"""
+    
+    def __init__(self, title: str, current_content: str = ""):
+        super().__init__(title=title)
+        
+        # Text input field for rule content
+        self.rule_input = discord.ui.TextInput(
+            label="Tournament Rules",
+            placeholder="Enter the tournament rules here...",
+            default=current_content,
+            style=discord.TextStyle.paragraph,
+            max_length=4000,
+            required=False
+        )
+        self.add_item(self.rule_input)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Get the content from the input
+            content = self.rule_input.value.strip()
+            
+            # Save the rules
+            success = set_rules_content(content, interaction.user.id, interaction.user.name)
+            
+            if success:
+                # Create confirmation embed
+                embed = discord.Embed(
+                    title="✅ Rules Updated Successfully",
+                    description="Tournament rules have been saved.",
+                    color=discord.Color.green(),
+                    timestamp=discord.utils.utcnow()
+                )
+                
+                if content:
+                    # Show preview of rules (truncated if too long)
+                    preview = content[:500] + "..." if len(content) > 500 else content
+                    embed.add_field(name="Rules Preview", value=f"```\n{preview}\n```", inline=False)
+                else:
+                    embed.add_field(name="Status", value="Rules have been cleared (empty)", inline=False)
+                
+                embed.set_footer(text=f"Updated by {interaction.user.name}")
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ Failed to save rules. Please try again.", ephemeral=True)
+                
+        except Exception as e:
+            print(f"Error in rule modal submission: {e}")
+            await interaction.response.send_message("❌ An error occurred while saving rules.", ephemeral=True)
+
+class RulesManagementView(discord.ui.View):
+    """Interactive view for organizers with rule management buttons"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)  # 5 minute timeout
+    
+    @discord.ui.button(label="Enter Rules", style=discord.ButtonStyle.green, emoji="📝")
+    async def enter_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Button to enter new rules"""
+        modal = RuleInputModal("Enter Tournament Rules")
+        await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="Reedit Rules", style=discord.ButtonStyle.primary, emoji="✏️")
+    async def reedit_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Button to edit existing rules"""
+        current_rules = get_current_rules()
+        
+        if not current_rules:
+            await interaction.response.send_message("❌ No rules are currently set. Use 'Enter Rules' to create new rules.", ephemeral=True)
+            return
+        
+        modal = RuleInputModal("Edit Tournament Rules", current_rules)
+        await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="Show Rules", style=discord.ButtonStyle.secondary, emoji="👁️")
+    async def show_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Button to display current rules"""
+        await display_rules(interaction)
+
+async def display_rules(interaction: discord.Interaction):
+    """Display current tournament rules in an embed"""
+    try:
+        current_rules = get_current_rules()
+        
+        if not current_rules:
+            embed = discord.Embed(
+                title="📋 Tournament Rules",
+                description="No tournament rules have been set yet.",
+                color=discord.Color.orange(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.set_footer(text="😈The Devil's Spot😈 Tournament System")
+        else:
+            embed = discord.Embed(
+                title="📋 Tournament Rules",
+                description=current_rules,
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow()
+            )
+            
+            # Add metadata if available
+            if 'rules' in tournament_rules and 'last_updated' in tournament_rules['rules']:
+                updated_by = tournament_rules['rules'].get('updated_by', {}).get('username', 'Unknown')
+                embed.set_footer(text=f"😈The Devil's Spot😈 • Last updated by {updated_by}")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        print(f"Error displaying rules: {e}")
+        await interaction.response.send_message("❌ An error occurred while displaying rules.", ephemeral=True)
 
 # ===========================================================================================
 # NOTIFICATION AND REMINDER SYSTEM (Ten-minute reminder for captains and judge)
@@ -789,6 +967,9 @@ async def on_ready():
     # Load scheduled events from file
     load_scheduled_events()
     
+    # Load tournament rules from file
+    load_rules()
+    
     # Sync commands with timeout handling
     try:
         print("🔄 Syncing slash commands...")
@@ -845,6 +1026,54 @@ async def help_command(interaction: discord.Interaction):
     embed.set_footer(text="🎯 Event Management System • Powered by Discord.py")
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@tree.command(name="rules", description="Manage or view tournament rules")
+async def rules_command(interaction: discord.Interaction):
+    """Main rules command with role-based functionality"""
+    try:
+        # Check if user has organizer permissions
+        if has_organizer_permission(interaction):
+            # Organizer gets management interface
+            embed = discord.Embed(
+                title="📋 Tournament Rules Management",
+                description="Choose an action to manage tournament rules:",
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow()
+            )
+            
+            current_rules = get_current_rules()
+            if current_rules:
+                embed.add_field(
+                    name="Current Status", 
+                    value="✅ Rules are set", 
+                    inline=True
+                )
+                # Show preview of current rules
+                preview = current_rules[:200] + "..." if len(current_rules) > 200 else current_rules
+                embed.add_field(
+                    name="Preview", 
+                    value=f"```\n{preview}\n```", 
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="Current Status", 
+                    value="❌ No rules set", 
+                    inline=True
+                )
+            
+            embed.set_footer(text="😈The Devil's Spot😈 • Organizer Panel")
+            
+            # Send with management buttons
+            view = RulesManagementView()
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        else:
+            # Non-organizer gets direct rule display
+            await display_rules(interaction)
+            
+    except Exception as e:
+        print(f"Error in rules command: {e}")
+        await interaction.response.send_message("❌ An error occurred while processing the rules command.", ephemeral=True)
     
 @tree.command(name="team_balance", description="Balance two teams based on player levels")
 @app_commands.describe(levels="Comma-separated player levels (e.g. 48,50,51,35,51,50,50,37,51,52)")
