@@ -577,6 +577,7 @@ class RulesManagementView(discord.ui.View):
 async def display_rules(interaction: discord.Interaction):
     """Display current tournament rules in an embed"""
     try:
+        global tournament_rules
         current_rules = get_current_rules()
         
         if not current_rules:
