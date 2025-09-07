@@ -601,11 +601,11 @@ async def display_rules(interaction: discord.Interaction):
                 updated_by = tournament_rules['rules'].get('updated_by', {}).get('username', 'Unknown')
                 embed.set_footer(text=f"😈The Devil's Spot😈 • Last updated by {updated_by}")
         
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
         
     except Exception as e:
         print(f"Error displaying rules: {e}")
-        await interaction.response.send_message("❌ An error occurred while displaying rules.", ephemeral=True)
+        await interaction.response.send_message("❌ An error occurred while displaying rules.", ephemeral=False)
 
 # ===========================================================================================
 # NOTIFICATION AND REMINDER SYSTEM (Ten-minute reminder for captains and judge)
