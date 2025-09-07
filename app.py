@@ -33,7 +33,8 @@ ROLE_IDS = {
     "judge": 1175620798912925917,
     # "recorder": 1302493626672091209,  # Commented out - not needed for now
     "head_helper": 1228878162918637578,
-    "helper_team": 1175619471671566406
+    "helper_team": 1175619471671566406,
+    "head_organizer": 1175890156067229838
 }
 
 # Set Windows event loop policy for asyncio
@@ -186,10 +187,11 @@ class TakeScheduleButton(View):
             await interaction.response.send_message("⏳ Another judge is currently taking this schedule. Please wait a moment.", ephemeral=True)
             return
             
-        # Check if user has Judge role
+        # Check if user has Judge or Head Organizer role
+        head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
         judge_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["judge"])
-        if not judge_role:
-            await interaction.response.send_message("❌ You need **Judge** role to take this schedule.", ephemeral=True)
+        if not (head_organizer_role or judge_role):
+            await interaction.response.send_message("❌ You need **Head Organizer** or **Judge** role to take this schedule.", ephemeral=True)
             return
             
         # Check if already taken
@@ -264,10 +266,11 @@ class TakeScheduleButton(View):
 
     @discord.ui.button(label="Release Schedule", style=discord.ButtonStyle.red, emoji="🔓", row=1, disabled=True)
     async def release_schedule(self, interaction: discord.Interaction, button: Button):
-        # Check if user has Judge role
+        # Check if user has Judge or Head Organizer role
+        head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
         judge_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["judge"])
-        if not judge_role:
-            await interaction.response.send_message("❌ You need **Judge** role to release this schedule.", ephemeral=True)
+        if not (head_organizer_role or judge_role):
+            await interaction.response.send_message("❌ You need **Head Organizer** or **Judge** role to release this schedule.", ephemeral=True)
             return
             
         # Check if there's a judge assigned
@@ -765,15 +768,17 @@ def calculate_time_difference(event_datetime: datetime.datetime, user_timezone: 
     }
 
 def has_event_create_permission(interaction):
-    """Check if user has permission to create events (Head Helper or Helper Team)"""
+    """Check if user has permission to create events (Head Organizer, Head Helper or Helper Team)"""
+    head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
     head_helper_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_helper"])
     helper_team_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helper_team"])
-    return head_helper_role is not None or helper_team_role is not None
+    return head_organizer_role is not None or head_helper_role is not None or helper_team_role is not None
 
 def has_event_result_permission(interaction):
-    """Check if user has permission to post event results (Judge)"""
+    """Check if user has permission to post event results (Head Organizer or Judge)"""
+    head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
     judge_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["judge"])
-    return judge_role is not None
+    return head_organizer_role is not None or judge_role is not None
 
 @bot.event
 async def on_ready():
@@ -819,9 +824,9 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="🏆 **Event Management**",
         value=(
-            "`/event-create` - Create tournament events (Head Helper/Helper Team)\n"
-            "`/event-result` - Record event results (Judge only)\n"
-            "`/event-delete` - Delete scheduled events (Head Helper/Helper Team)"
+            "`/event-create` - Create tournament events (Head Organizer/Head Helper/Helper Team)\n"
+            "`/event-result` - Record event results (Head Organizer/Judge)\n"
+            "`/event-delete` - Delete scheduled events (Head Organizer/Head Helper/Helper Team)"
         ),
         inline=False
     )
@@ -892,7 +897,7 @@ async def event(interaction: discord.Interaction, action: app_commands.Choice[st
     """Base event command - this will be handled by subcommands"""
     await interaction.response.send_message(f"Please use `/event {action.value}` with the appropriate parameters.", ephemeral=True)
 
-@tree.command(name="event-create", description="Creates an event (Head Helper/Helper Team only)")
+@tree.command(name="event-create", description="Creates an event (Head Organizer/Head Helper/Helper Team only)")
 @app_commands.describe(
     team_1_captain="Captain of team 1",
     team_2_captain="Captain of team 2", 
@@ -921,7 +926,7 @@ async def event_create(
     
     # Check permissions
     if not has_event_create_permission(interaction):
-        await interaction.followup.send("❌ You need **Head Helper** or **Helper Team** role to create events.", ephemeral=True)
+        await interaction.followup.send("❌ You need **Head Organizer**, **Head Helper** or **Helper Team** role to create events.", ephemeral=True)
         return
     
     # Validate input parameters
@@ -1086,7 +1091,7 @@ async def event_create(
     except Exception as e:
         await interaction.followup.send(f"⚠️ Could not post in current channel: {e}", ephemeral=True)
 
-@tree.command(name="event-result", description="Add event results (Judge only)")
+@tree.command(name="event-result", description="Add event results (Head Organizer/Judge only)")
 @app_commands.describe(
     winner="Winner of the event",
     winner_score="Winner's score",
@@ -1135,7 +1140,7 @@ async def event_result(
     
     # Check permissions
     if not has_event_result_permission(interaction):
-        await interaction.followup.send("❌ You need **Judge** role to post event results.", ephemeral=True)
+        await interaction.followup.send("❌ You need **Head Organizer** or **Judge** role to post event results.", ephemeral=True)
         return
 
     # Validate scores
@@ -1361,14 +1366,15 @@ async def choose(interaction: discord.Interaction, options: str):
     await interaction.response.send_message(embed=embed)
 
 
-@tree.command(name="event-delete", description="Delete a scheduled event (Head Helper/Helper Team only)")
+@tree.command(name="event-delete", description="Delete a scheduled event (Head Organizer/Head Helper/Helper Team only)")
 async def event_delete(interaction: discord.Interaction):
-    # Check permissions - only Head Helper or Helper Team can delete events
+    # Check permissions - only Head Organizer, Head Helper or Helper Team can delete events
+    head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
     head_helper_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_helper"])
     helper_team_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helper_team"])
     
-    if not (head_helper_role or helper_team_role):
-        await interaction.response.send_message("❌ You need **Head Helper** or **Helper Team** role to delete events.", ephemeral=True)
+    if not (head_organizer_role or head_helper_role or helper_team_role):
+        await interaction.response.send_message("❌ You need **Head Organizer**, **Head Helper** or **Helper Team** role to delete events.", ephemeral=True)
         return
     
     try:
@@ -1510,7 +1516,7 @@ async def exchange_judge(
 ):
     # Only Head Helper or Helper Team can exchange judges
     if not has_event_create_permission(interaction):
-        await interaction.response.send_message("❌ You need Head Helper or Helper Team role to exchange judges.", ephemeral=True)
+        await interaction.response.send_message("❌ You need Head Organizer, Head Helper or Helper Team role to exchange judges.", ephemeral=True)
         return
 
     # Validate roles of old/new judges
