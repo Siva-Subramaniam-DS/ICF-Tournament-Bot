@@ -1,6 +1,9 @@
-# Discord Bot Railway Deployment Guide
+# ICF Tournament Bot Railway Deployment Guide
 
-This guide will help you deploy your Discord bot to Railway.com using Docker.
+This guide will help you deploy the ICF Tournament Bot to Railway.com using Docker.
+
+**Last Updated:** September 7, 2025  
+**Bot Version:** 3.0.0
 
 ## 📋 Prerequisites
 

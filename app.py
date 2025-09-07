@@ -1,3 +1,11 @@
+"""
+ICF Tournament Bot - Discord Bot for Tournament Management
+Version: 3.0.0
+Last Updated: September 7, 2025
+Description: Comprehensive tournament management system for ICF competitions
+Features: Match scheduling, judge assignment, rule management, result tracking
+"""
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -22,19 +30,15 @@ load_dotenv()
 
 # Channel IDs for event management
 CHANNEL_IDS = {
-    "take_schedule": 1272263927736045618,
-    "results": 1175587317558288484,
-    "staff_attendance": 1197214718713155595,
-    "transcript": 1175720148259324017
+    "schedules": 1413926551044751542,
+    "match_results": 1413924771699097721,
+    "match_reports": 1414247921896919182
 }
 
 # Role IDs for permissions
 ROLE_IDS = {
-    "judge": 1175620798912925917,
-    # "recorder": 1302493626672091209,  # Commented out - not needed for now
-    "head_helper": 1228878162918637578,
-    "helper_team": 1175619471671566406,
-    "head_organizer": 1175890156067229838
+    "helpers_tournament": 1385296509289107671,
+    "organizers": 1385296705179619450
 }
 
 # Set Windows event loop policy for asyncio
@@ -156,8 +160,8 @@ def set_rules_content(content, user_id, username):
 
 def has_organizer_permission(interaction):
     """Check if user has organizer permissions for rule management"""
-    head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
-    return head_organizer_role is not None
+    organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
+    return organizers_role is not None
 
 # Embed field utility functions for safe Discord.py embed manipulation
 def find_field_index(embed: discord.Embed, field_name: str) -> int:
@@ -249,11 +253,11 @@ class TakeScheduleButton(View):
             await interaction.response.send_message("⏳ Another judge is currently taking this schedule. Please wait a moment.", ephemeral=True)
             return
             
-        # Check if user has Judge or Head Organizer role
-        head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
-        judge_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["judge"])
-        if not (head_organizer_role or judge_role):
-            await interaction.response.send_message("❌ You need **Head Organizer** or **Judge** role to take this schedule.", ephemeral=True)
+        # Check if user has Helpers Tournament or Organizers role
+        organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
+        helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
+        if not (organizers_role or helpers_role):
+            await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to take this schedule.", ephemeral=True)
             return
             
         # Check if already taken
@@ -291,10 +295,6 @@ class TakeScheduleButton(View):
             button.disabled = True
             button.emoji = "✅"
             
-            # Enable release button for the assigned judge
-            release_button = self.children[1]  # Second button (Release Schedule)
-            release_button.disabled = False
-            
             # Update the embed
             embed = interaction.message.embeds[0]
             embed.color = discord.Color.green()
@@ -304,7 +304,7 @@ class TakeScheduleButton(View):
                 await interaction.followup.send("❌ Failed to update embed with judge information.", ephemeral=True)
                 return
             
-            # Update the message with both buttons (take and release)
+            # Update the message
             await interaction.message.edit(embed=embed, view=self)
             
             # Send success message
@@ -326,74 +326,7 @@ class TakeScheduleButton(View):
             # Reset flag after processing
             self._taking_schedule = False
 
-    @discord.ui.button(label="Release Schedule", style=discord.ButtonStyle.red, emoji="🔓", row=1, disabled=True)
-    async def release_schedule(self, interaction: discord.Interaction, button: Button):
-        # Check if user has Judge or Head Organizer role
-        head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
-        judge_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["judge"])
-        if not (head_organizer_role or judge_role):
-            await interaction.response.send_message("❌ You need **Head Organizer** or **Judge** role to release this schedule.", ephemeral=True)
-            return
-            
-        # Check if there's a judge assigned
-        if not self.judge:
-            await interaction.response.send_message("❌ No judge is currently assigned to this schedule.", ephemeral=True)
-            return
-            
-        # Check if the user is the assigned judge
-        if self.judge.id != interaction.user.id:
-            await interaction.response.send_message(f"❌ Only {self.judge.display_name} can release this schedule.", ephemeral=True)
-            return
-        
-        try:
-            # Defer response to give us time to process
-            await interaction.response.defer(ephemeral=True)
-            
-            # Store the judge for notification
-            released_judge = self.judge
-            
-            # Remove judge assignment
-            remove_judge_assignment(self.judge.id, self.event_id)
-            
-            # Reset judge
-            self.judge = None
-            
-            # Update button appearance
-            take_button = self.children[0]  # First button (Take Schedule)
-            take_button.label = "Take Schedule"
-            take_button.style = discord.ButtonStyle.green
-            take_button.disabled = False
-            take_button.emoji = "📋"
-            
-            # Hide release button
-            button.label = "Released"
-            button.style = discord.ButtonStyle.gray
-            button.disabled = True
-            button.emoji = "✅"
-            
-            # Update the embed
-            embed = interaction.message.embeds[0]
-            embed.color = discord.Color.blue()
-            
-            # Remove judge field
-            remove_judge_field(embed)
-            
-            # Update the message
-            await interaction.message.edit(embed=embed, view=self)
-            
-            # Send success message
-            await interaction.followup.send("✅ You have successfully released this schedule!", ephemeral=True)
-            
-            # Send notification to the event channel
-            await self.send_judge_release_notification(released_judge)
-            
-            # Update scheduled events
-            if self.event_id in scheduled_events:
-                scheduled_events[self.event_id]['judge'] = None
-            
-        except Exception as e:
-            print(f"Error in release_schedule: {e}")
-            await interaction.followup.send(f"❌ An error occurred while releasing the schedule: {str(e)}", ephemeral=True)
+
     
     
     
@@ -434,7 +367,7 @@ class TakeScheduleButton(View):
                 inline=True
             )
             
-            embed.set_footer(text="Judge Assignment • 😈The Devil's Spot😈")
+            embed.set_footer(text="Judge Assignment • ICF Tournament Bot")
             
             # Send notification to the event channel
             await self.event_channel.send(
@@ -447,47 +380,6 @@ class TakeScheduleButton(View):
         except Exception as e:
             print(f"Error sending judge assignment notification: {e}")
     
-    async def send_judge_release_notification(self, released_judge: discord.Member):
-        """Send notification to the event channel when a judge releases the schedule and remove judge from channel"""
-        if not self.event_channel:
-            return
-        
-        try:
-            # Remove judge from the event channel by resetting permissions
-            await self.event_channel.set_permissions(released_judge, overwrite=None)
-            
-            # Create notification embed
-            embed = discord.Embed(
-                title="🔓 Judge Released Schedule",
-                description=f"**{released_judge.display_name}** has released the judge assignment for this match.",
-                color=discord.Color.orange(),
-                timestamp=discord.utils.utcnow()
-            )
-            
-            embed.add_field(
-                name="📋 Match Details",
-                value=f"**Team 1:** {self.team1_captain.display_name} `@{self.team1_captain.name}`\n**Team 2:** {self.team2_captain.display_name} `@{self.team2_captain.name}`",
-                inline=False
-            )
-            
-            embed.add_field(
-                name="🔍 Status",
-                value="**Looking for a new judge!**\nThis match is now available for other judges to take.\n❌ **Judge removed from channel**",
-                inline=False
-            )
-            
-            embed.set_footer(text="Judge Release • 😈The Devil's Spot😈")
-            
-            # Send notification to the event channel
-            await self.event_channel.send(embed=embed)
-            
-        except discord.Forbidden:
-            print(f"Error: Bot doesn't have permission to remove {released_judge.display_name} from channel {self.event_channel.name}")
-        except Exception as e:
-            print(f"Error sending judge release notification: {e}")
-
-
-
 
 
 # ===========================================================================================
@@ -587,7 +479,7 @@ async def display_rules(interaction: discord.Interaction):
                 color=discord.Color.orange(),
                 timestamp=discord.utils.utcnow()
             )
-            embed.set_footer(text="😈The Devil's Spot😈 Tournament System")
+            embed.set_footer(text="ICF Tournament System")
         else:
             embed = discord.Embed(
                 title="📋 Tournament Rules",
@@ -599,7 +491,7 @@ async def display_rules(interaction: discord.Interaction):
             # Add metadata if available
             if 'rules' in tournament_rules and 'last_updated' in tournament_rules['rules']:
                 updated_by = tournament_rules['rules'].get('updated_by', {}).get('username', 'Unknown')
-                embed.set_footer(text=f"😈The Devil's Spot😈 • Last updated by {updated_by}")
+                embed.set_footer(text=f"ICF Tournament Bot • Last updated by {updated_by}")
         
         await interaction.response.send_message(embed=embed, ephemeral=False)
         
@@ -724,7 +616,7 @@ def get_random_template():
             return random.choice(image_files)
     return None
 
-def create_event_poster(template_path: str, round_num: int, team1_captain: str, team2_captain: str, utc_time: str, date_str: str = None, tournament_name: str = "King of the Seas", server_name: str = "The Devil's Spot") -> str:
+def create_event_poster(template_path: str, round_num: int, team1_captain: str, team2_captain: str, utc_time: str, date_str: str = None, tournament_name: str = "ICF Tournament", server_name: str = "ICF Tournament Bot") -> str:
     """Create event poster with text overlays"""
     try:
         # Open the template image
@@ -840,12 +732,37 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 # Draw main text on top
                 draw.text((x, y), text, font=font, fill=text_color)
             
-            # Add server name text (top center, bold)
+            # Add ICF logo if available
+            try:
+                logo_path = "Logo_ICF_2025_400.png"
+                if os.path.exists(logo_path):
+                    with Image.open(logo_path) as logo_img:
+                        # Resize logo to fit nicely (max 15% of poster height)
+                        logo_max_height = int(height * 0.15)
+                        logo_width, logo_height = logo_img.size
+                        if logo_height > logo_max_height:
+                            ratio = logo_max_height / logo_height
+                            new_logo_width = int(logo_width * ratio)
+                            logo_img = logo_img.resize((new_logo_width, logo_max_height), Image.Resampling.LANCZOS)
+                        
+                        # Position logo at top center
+                        logo_x = (width - logo_img.width) // 2
+                        logo_y = int(height * 0.05)
+                        
+                        # Paste logo onto poster
+                        if logo_img.mode == 'RGBA':
+                            poster.paste(logo_img, (logo_x, logo_y), logo_img)
+                        else:
+                            poster.paste(logo_img, (logo_x, logo_y))
+            except Exception as e:
+                print(f"Error adding logo: {e}")
+            
+            # Add server name text (below logo, center, bold)
             server_text = server_name
             server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
             server_width = server_bbox[2] - server_bbox[0]
             server_x = (width - server_width) // 2
-            server_y = int(height * 0.08)  # Moved down slightly
+            server_y = int(height * 0.22)  # Moved down to accommodate logo
             draw_text_with_outline(server_text, server_x, server_y, font_title)
             
             # Add Round text (center) - use yellow for emphasis with more spacing
@@ -853,7 +770,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             round_bbox = draw.textbbox((0, 0), round_text, font=font_large)
             round_width = round_bbox[2] - round_bbox[0]
             round_x = (width - round_width) // 2
-            round_y = int(height * 0.35)  # More space from top
+            round_y = int(height * 0.40)  # Adjusted for logo space
             draw_text_with_outline(round_text, round_x, round_y, font_large, use_yellow=True)
             
             # Add Captain vs Captain text (center) with more spacing
@@ -861,7 +778,7 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             vs_bbox = draw.textbbox((0, 0), vs_text, font=font_medium)
             vs_width = vs_bbox[2] - vs_bbox[0]
             vs_x = (width - vs_width) // 2
-            vs_y = int(height * 0.55)  # More space between round and captains
+            vs_y = int(height * 0.58)  # Adjusted for logo space
             draw_text_with_outline(vs_text, vs_x, vs_y, font_medium)
             
             # Add date (if provided) with more spacing
@@ -947,17 +864,15 @@ def calculate_time_difference(event_datetime: datetime.datetime, user_timezone: 
     }
 
 def has_event_create_permission(interaction):
-    """Check if user has permission to create events (Head Organizer, Head Helper or Helper Team)"""
-    head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
-    head_helper_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_helper"])
-    helper_team_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helper_team"])
-    return head_organizer_role is not None or head_helper_role is not None or helper_team_role is not None
+    """Check if user has permission to create events (Organizers only)"""
+    organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
+    return organizers_role is not None
 
 def has_event_result_permission(interaction):
-    """Check if user has permission to post event results (Head Organizer or Judge)"""
-    head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
-    judge_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["judge"])
-    return head_organizer_role is not None or judge_role is not None
+    """Check if user has permission to post event results (Organizers or Helpers Tournament)"""
+    organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
+    helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
+    return organizers_role is not None or helpers_role is not None
 
 @bot.event
 async def on_ready():
@@ -1007,9 +922,9 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="🏆 **Event Management**",
         value=(
-            "`/event-create` - Create tournament events (Head Organizer/Head Helper/Helper Team)\n"
-            "`/event-result` - Record event results (Head Organizer/Judge)\n"
-            "`/event-delete` - Delete scheduled events (Head Organizer/Head Helper/Helper Team)"
+            "`/event-create` - Create tournament events (Organizers)\n"
+            "`/event-result` - Record event results (Organizers/Helpers Tournament)\n"
+            "`/event-delete` - Delete scheduled events (Organizers/Helpers Tournament)"
         ),
         inline=False
     )
@@ -1064,7 +979,7 @@ async def rules_command(interaction: discord.Interaction):
                     inline=True
                 )
             
-            embed.set_footer(text="😈The Devil's Spot😈 • Organizer Panel")
+            embed.set_footer(text="ICF Tournament Bot • Organizer Panel")
             
             # Send with management buttons
             view = RulesManagementView()
@@ -1128,7 +1043,7 @@ async def event(interaction: discord.Interaction, action: app_commands.Choice[st
     """Base event command - this will be handled by subcommands"""
     await interaction.response.send_message(f"Please use `/event {action.value}` with the appropriate parameters.", ephemeral=True)
 
-@tree.command(name="event-create", description="Creates an event (Head Organizer/Head Helper/Helper Team only)")
+@tree.command(name="event-create", description="Creates an event (Organizers only)")
 @app_commands.describe(
     team_1_captain="Captain of team 1",
     team_2_captain="Captain of team 2", 
@@ -1157,7 +1072,7 @@ async def event_create(
     
     # Check permissions
     if not has_event_create_permission(interaction):
-        await interaction.followup.send("❌ You need **Head Organizer**, **Head Helper** or **Helper Team** role to create events.", ephemeral=True)
+        await interaction.followup.send("❌ You need **Organizers** role to create events.", ephemeral=True)
         return
     
     # Validate input parameters
@@ -1279,7 +1194,7 @@ async def event_create(
         except Exception as e:
             print(f"Error loading poster image: {e}")
     
-    embed.set_footer(text="Event Management • 😈The Devil's Spot😈")
+    embed.set_footer(text="Event Management • ICF Tournament Bot")
     
     # Create Take Schedule button
     take_schedule_view = TakeScheduleButton(event_id, team_1_captain, team_2_captain, interaction.channel)
@@ -1289,9 +1204,9 @@ async def event_create(
     
     # Post in Take-Schedule channel (with button)
     try:
-        schedule_channel = interaction.guild.get_channel(CHANNEL_IDS["take_schedule"])
+        schedule_channel = interaction.guild.get_channel(CHANNEL_IDS["schedules"])
         if schedule_channel:
-            judge_ping = f"<@&{ROLE_IDS['judge']}>"
+            judge_ping = f"<@&{ROLE_IDS['helpers_tournament']}> <@&{ROLE_IDS['organizers']}>"
             if poster_image:
                 with open(poster_image, 'rb') as f:
                     file = discord.File(f, filename="event_poster.png")
@@ -1322,7 +1237,7 @@ async def event_create(
     except Exception as e:
         await interaction.followup.send(f"⚠️ Could not post in current channel: {e}", ephemeral=True)
 
-@tree.command(name="event-result", description="Add event results (Head Organizer/Judge only)")
+@tree.command(name="event-result", description="Add event results (Organizers/Helpers Tournament only)")
 @app_commands.describe(
     winner="Winner of the event",
     winner_score="Winner's score",
@@ -1371,7 +1286,7 @@ async def event_result(
     
     # Check permissions
     if not has_event_result_permission(interaction):
-        await interaction.followup.send("❌ You need **Head Organizer** or **Judge** role to post event results.", ephemeral=True)
+        await interaction.followup.send("❌ You need **Organizers** or **Helpers Tournament** role to post event results.", ephemeral=True)
         return
 
     # Validate scores
@@ -1433,14 +1348,14 @@ async def event_result(
         screenshot_text += f"📷 {' • '.join(screenshot_names)}"
         embed.add_field(name="", value=screenshot_text, inline=False)
     
-    embed.set_footer(text="Event Results • 😈The Devil's Spot😈")
+    embed.set_footer(text="Event Results • ICF Tournament Bot")
     
     # Send confirmation to user
     await interaction.followup.send("✅ Event results posted to Results channel and Staff Attendance logged!", ephemeral=True)
     
     # Post in Results channel with screenshots as attachments
     try:
-        results_channel = interaction.guild.get_channel(CHANNEL_IDS["results"])
+        results_channel = interaction.guild.get_channel(CHANNEL_IDS["match_results"])
         if results_channel:
             if files_to_send:
                 # Send as attachments + single embed so Discord shows gallery above embed
@@ -1453,24 +1368,6 @@ async def event_result(
         await interaction.followup.send(f"⚠️ Could not post in Results channel: {e}", ephemeral=True)
 
     # Winner-only summary removed per request
-    
-    # Post staff attendance in Staff Attendance channel
-    try:
-        staff_attendance_channel = interaction.guild.get_channel(CHANNEL_IDS["staff_attendance"])
-        if staff_attendance_channel:
-            # Create staff attendance message
-            attendance_text = f"🏅 {winner.display_name} Vs {loser.display_name}\n"
-            attendance_text += f"**Round :** {round}\n\n"
-            attendance_text += f"**Results**\n"
-            attendance_text += f"🏆 {winner.display_name} ({winner_score}) Vs ({loser_score}) {loser.display_name} 💀\n\n"
-            attendance_text += f"**Staffs**\n"
-            attendance_text += f"• Judge: {interaction.user.mention} `@{interaction.user.name}`"
-            
-            await staff_attendance_channel.send(attendance_text)
-        else:
-            print("⚠️ Could not find Staff Attendance channel.")
-    except Exception as e:
-        print(f"⚠️ Could not post in Staff Attendance channel: {e}")
 
 @tree.command(name="time", description="Get a random match time from fixed 30-min slots (12:00-17:00 UTC)")
 async def time(interaction: discord.Interaction):
@@ -1501,7 +1398,7 @@ async def time(interaction: discord.Interaction):
         inline=False
     )
                     
-    embed.set_footer(text="Match Time Generator • 😈The Devil's Spot😈")
+    embed.set_footer(text="Match Time Generator • ICF Tournament Bot")
     
     await interaction.response.send_message(embed=embed)
 
@@ -1540,7 +1437,7 @@ async def choose(interaction: discord.Interaction, options: str):
             selected_maps = random.sample(maps, number)
             
             embed = discord.Embed(
-                title="🗺️ Random Map Selection 😈The Devil's Spot😈",
+                title="🗺️ Random Map Selection - ICF Tournament Bot",
                 description=f"**Randomly selected {number} map(s):**",
                 color=discord.Color.green(),
                 timestamp=discord.utils.utcnow()
@@ -1554,7 +1451,7 @@ async def choose(interaction: discord.Interaction, options: str):
                 inline=False
             )
             
-            embed.set_footer(text="Random Map Selection • 😈The Devil's Spot😈")
+            embed.set_footer(text="Random Map Selection • ICF Tournament Bot")
             await interaction.response.send_message(embed=embed)
             return
         else:
@@ -1592,20 +1489,19 @@ async def choose(interaction: discord.Interaction, options: str):
         inline=False
     )
     
-    embed.set_footer(text="Random Choice Generator •  😈The Devil's Spot😈")
+    embed.set_footer(text="Random Choice Generator • ICF Tournament Bot")
     
     await interaction.response.send_message(embed=embed)
 
 
-@tree.command(name="event-delete", description="Delete a scheduled event (Head Organizer/Head Helper/Helper Team only)")
+@tree.command(name="event-delete", description="Delete a scheduled event (Organizers/Helpers Tournament)")
 async def event_delete(interaction: discord.Interaction):
-    # Check permissions - only Head Organizer, Head Helper or Helper Team can delete events
-    head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
-    head_helper_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_helper"])
-    helper_team_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helper_team"])
+    # Check permissions - Organizers and Helpers Tournament can delete events
+    organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
+    helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
     
-    if not (head_organizer_role or head_helper_role or helper_team_role):
-        await interaction.response.send_message("❌ You need **Head Organizer**, **Head Helper** or **Helper Team** role to delete events.", ephemeral=True)
+    if not (organizers_role or helpers_role):
+        await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to delete events.", ephemeral=True)
         return
     
     try:
@@ -1708,7 +1604,7 @@ async def event_delete(interaction: discord.Interaction):
                     inline=False
                 )
                 
-                embed.set_footer(text="Event Management • 😈The Devil's Spot😈")
+                embed.set_footer(text="Event Management • ICF Tournament Bot")
                 
                 await select_interaction.response.edit_message(embed=embed, view=None)
         
@@ -1726,7 +1622,7 @@ async def event_delete(interaction: discord.Interaction):
             inline=False
         )
         
-        embed.set_footer(text="Event Management • 😈The Devil's Spot😈")
+        embed.set_footer(text="Event Management • ICF Tournament Bot")
         
         view = EventDeleteView()
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)

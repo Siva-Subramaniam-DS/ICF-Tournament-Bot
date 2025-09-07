@@ -7,7 +7,7 @@ discord.py>=2.3.0
 python-dotenv>=1.0.0
 
 # Date and time utilities
-pytz>=2023.3
+pytz>=2024.1
 
 # Image processing (lightweight)
 Pillow>=10.0.0

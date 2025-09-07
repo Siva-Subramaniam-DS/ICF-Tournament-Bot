@@ -60,5 +60,5 @@ temp_*.png
 temp_*.jpg
 temp_*.jpeg
 # Keep logo and templates
-!D1logo.png
+!Logo_ICF_2025_400.png
 !Templates/ 

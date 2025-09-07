@@ -1,6 +1,9 @@
-# Discord Bot Docker Deployment Guide
+# ICF Tournament Bot Docker Deployment Guide
 
-This guide will help you deploy your Discord bot using Docker without modifying any existing code.
+This guide will help you deploy the ICF Tournament Bot using Docker without modifying any existing code.
+
+**Last Updated:** September 7, 2025  
+**Bot Version:** 3.0.0
 
 ## 📋 Prerequisites
 

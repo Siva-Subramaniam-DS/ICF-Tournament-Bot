@@ -1,6 +1,7 @@
 #!/bin/bash
-# Railway deployment script
-echo "Starting deployment..."
+# ICF Tournament Bot Railway deployment script
+# Last Updated: September 7, 2025
+echo "Starting ICF Tournament Bot deployment..."
 pip install --upgrade pip
 pip uninstall -y emoji pilmoji
 pip install emoji==1.6.3

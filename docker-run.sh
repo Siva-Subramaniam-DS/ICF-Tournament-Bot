@@ -1,9 +1,10 @@
 #!/bin/bash
 
-# Discord Bot Docker Runner Script
-# This script helps you run the Discord bot in Docker
+# ICF Tournament Bot Docker Runner Script
+# This script helps you run the ICF Tournament Bot in Docker
+# Last Updated: September 7, 2025
 
-echo "🎮 Discord Bot Docker Runner"
+echo "🎮 ICF Tournament Bot Docker Runner"
 echo "============================"
 
 # Check if .env file exists

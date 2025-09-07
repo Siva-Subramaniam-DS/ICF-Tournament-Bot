@@ -1,5 +1,8 @@
 # Railway Deployment Troubleshooting Guide
 
+**Last Updated:** September 7, 2025  
+**For ICF Tournament Bot v3.0.0**
+
 ## 🚨 Common Railway Build Errors
 
 ### Error: "failed to solve: process did not complete successfully: exit code: 100"

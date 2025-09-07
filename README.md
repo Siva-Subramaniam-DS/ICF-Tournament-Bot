@@ -1,6 +1,10 @@
-# 🎯 Enhanced Discord Event Management Bot
+# 🎯 ICF Tournament Bot
 
-A comprehensive Discord bot for managing tournament events, judge assignments, and team coordination with advanced features and robust error handling.
+A comprehensive Discord bot for managing ICF (International Canoe Federation) tournament events, judge assignments, and team coordination with advanced features and robust error handling.
+
+**Version:** 3.0.0  
+**Last Updated:** September 7, 2025  
+**Status:** Production Ready
 
 ## ✨ Features
 
@@ -102,14 +106,13 @@ DISCORD_TOKEN=your_bot_token_here
 LOG_LEVEL=INFO
 
 # Optional - Channel IDs (defaults provided)
-CHANNEL_TAKE_SCHEDULE=1261575528457179196
-CHANNEL_RESULTS=1184579244202922144
-CHANNEL_STAFF_ATTENDANCE=1197246999439867904
+CHANNEL_SCHEDULES=1413926551044751542
+CHANNEL_MATCH_RESULTS=1413924771699097721
+CHANNEL_MATCH_REPORTS=1414247921896919182
 
 # Optional - Role IDs (defaults provided)
-ROLE_JUDGE=1184587751916568666
-ROLE_HEAD_HELPER=1231372488789721128
-ROLE_HELPER_TEAM=1184587759487303790
+ROLE_HELPERS_TOURNAMENT=1385296509289107671
+ROLE_ORGANIZERS=1385296705179619450
 
 # Optional - Limits
 MAX_JUDGE_ASSIGNMENTS=3
@@ -215,14 +218,23 @@ For support, please:
 
 ## 🔄 Version History
 
-### v2.0.0 (Current)
+### v3.0.0 (Current - September 2025)
+- ICF Tournament Bot branding implementation
+- Simplified two-role permission system (Helpers Tournament & Organizers)
+- Updated channel configuration for match reports, schedules, and results
+- Removed staff attendance functionality
+- Enhanced judge assignment system with workload balancing
+- Comprehensive error handling and logging
+- Logo integration for event posters
+
+### v2.0.0 (Legacy)
 - Enhanced error handling and logging
 - Persistent judge assignment storage
 - Improved embed manipulation
 - Configuration management system
 - Comprehensive validation
 
-### v1.0.0
+### v1.0.0 (Legacy)
 - Basic event management
 - Judge assignment system
 - Discord slash commands

@@ -1,8 +1,9 @@
 @echo off
-REM Discord Bot Docker Runner Script for Windows
-REM This script helps you run the Discord bot in Docker
+REM ICF Tournament Bot Docker Runner Script for Windows
+REM This script helps you run the ICF Tournament Bot in Docker
+REM Last Updated: September 7, 2025
 
-echo 🎮 Discord Bot Docker Runner
+echo 🎮 ICF Tournament Bot Docker Runner
 echo ============================
 
 REM Check if .env file exists
