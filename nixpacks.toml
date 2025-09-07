@@ -1,3 +1,6 @@
+# ICF Tournament Bot Nixpacks Configuration
+# Last Updated: September 7, 2025
+
 [phases.setup]
 nixPkgs = ["python311"]
 

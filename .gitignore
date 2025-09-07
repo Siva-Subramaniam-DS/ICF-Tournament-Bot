@@ -1,3 +1,6 @@
+# ICF Tournament Bot Git Ignore
+# Last Updated: September 7, 2025
+
 # Environment variables
 .env
 .env.local

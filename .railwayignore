@@ -1,3 +1,5 @@
+# ICF Tournament Bot Railway Ignore
+# Last Updated: September 7, 2025
 # Force rebuild
 __pycache__/
 *.pyc
