@@ -157,7 +157,7 @@ def set_rules_content(content, user_id, username):
 def has_organizer_permission(interaction):
     """Check if user has organizer permissions for rule management"""
     head_organizer_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["head_organizer"])
-    return head_organizer_role is not Nonee is not None
+    return head_organizer_role is not None
 
 # Embed field utility functions for safe Discord.py embed manipulation
 def find_field_index(embed: discord.Embed, field_name: str) -> int:
@@ -996,7 +996,8 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="⚙️ **System Commands**",
         value=(
-            "`/help` - Display this command guide"
+            "`/help` - Display this command guide\n"
+            "`/rules` - Manage or view tournament rules"
         ),
         inline=False
     )
