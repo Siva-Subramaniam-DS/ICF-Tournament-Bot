@@ -1497,6 +1497,126 @@ async def choose(interaction: discord.Interaction, options: str):
     await interaction.response.send_message(embed=embed)
 
 
+@tree.command(name="general_tie_breaker", description="To break a tie between two teams using the highest total score")
+@app_commands.describe(
+    tm1_name="Name of the first team. By default, it is Alpha",
+    tm1_pl1_score="Score of the first player of the first team",
+    tm1_pl2_score="Score of the second player of the first team", 
+    tm1_pl3_score="Score of the third player of the first team",
+    tm1_pl4_score="Score of the fourth player of the first team",
+    tm1_pl5_score="Score of the fifth player of the first team",
+    tm2_name="Name of the second team. By default, it is Bravo",
+    tm2_pl1_score="Score of the first player of the second team",
+    tm2_pl2_score="Score of the second player of the second team",
+    tm2_pl3_score="Score of the third player of the second team",
+    tm2_pl4_score="Score of the fourth player of the second team",
+    tm2_pl5_score="Score of the fifth player of the second team"
+)
+async def general_tie_breaker(
+    interaction: discord.Interaction,
+    tm1_pl1_score: int,
+    tm1_pl2_score: int,
+    tm1_pl3_score: int,
+    tm1_pl4_score: int,
+    tm1_pl5_score: int,
+    tm2_pl1_score: int,
+    tm2_pl2_score: int,
+    tm2_pl3_score: int,
+    tm2_pl4_score: int,
+    tm2_pl5_score: int,
+    tm1_name: str = "Alpha",
+    tm2_name: str = "Bravo"
+):
+    """Break a tie between two teams using the highest total score"""
+    
+    # Check permissions - only organizers and helpers can use this command
+    if not has_event_create_permission(interaction):
+        await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to use tie breaker.", ephemeral=True)
+        return
+    
+    # Calculate team totals
+    tm1_total = tm1_pl1_score + tm1_pl2_score + tm1_pl3_score + tm1_pl4_score + tm1_pl5_score
+    tm2_total = tm2_pl1_score + tm2_pl2_score + tm2_pl3_score + tm2_pl4_score + tm2_pl5_score
+    
+    # Determine winner
+    if tm1_total > tm2_total:
+        winner = tm1_name
+        winner_total = tm1_total
+        loser = tm2_name
+        loser_total = tm2_total
+        color = discord.Color.green()
+    elif tm2_total > tm1_total:
+        winner = tm2_name
+        winner_total = tm2_total
+        loser = tm1_name
+        loser_total = tm1_total
+        color = discord.Color.green()
+    else:
+        # Still tied
+        winner = "TIE"
+        winner_total = tm1_total
+        loser = ""
+        loser_total = tm2_total
+        color = discord.Color.orange()
+    
+    # Create result embed
+    embed = discord.Embed(
+        title="🏆 Tie Breaker Results",
+        description="Results based on highest total team score",
+        color=color,
+        timestamp=discord.utils.utcnow()
+    )
+    
+    # Team 1 scores
+    embed.add_field(
+        name=f"🔵 {tm1_name} Team",
+        value=f"Player 1: `{tm1_pl1_score}`\n"
+              f"Player 2: `{tm1_pl2_score}`\n"
+              f"Player 3: `{tm1_pl3_score}`\n"
+              f"Player 4: `{tm1_pl4_score}`\n"
+              f"Player 5: `{tm1_pl5_score}`\n"
+              f"**Total: {tm1_total}**",
+        inline=True
+    )
+    
+    # Team 2 scores
+    embed.add_field(
+        name=f"🔴 {tm2_name} Team",
+        value=f"Player 1: `{tm2_pl1_score}`\n"
+              f"Player 2: `{tm2_pl2_score}`\n"
+              f"Player 3: `{tm2_pl3_score}`\n"
+              f"Player 4: `{tm2_pl4_score}`\n"
+              f"Player 5: `{tm2_pl5_score}`\n"
+              f"**Total: {tm2_total}**",
+        inline=True
+    )
+    
+    # Add spacing
+    embed.add_field(name="\u200b", value="\u200b", inline=False)
+    
+    # Result
+    if winner == "TIE":
+        embed.add_field(
+            name="🤝 Final Result",
+            value=f"**STILL TIED!**\n"
+                  f"Both teams scored {tm1_total} points\n"
+                  f"Additional tie-breaking method needed",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="🏆 Winner",
+            value=f"**{winner}** wins the tie breaker!\n"
+                  f"**{winner}**: {winner_total} points\n"
+                  f"**{loser}**: {loser_total} points\n"
+                  f"Difference: {abs(winner_total - loser_total)} points",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"Tie Breaker • Calculated by {interaction.user.display_name}")
+    
+    await interaction.response.send_message(embed=embed)
+
 @tree.command(name="event-delete", description="Delete a scheduled event (Organizers/Helpers Tournament)")
 async def event_delete(interaction: discord.Interaction):
     # Check permissions - Organizers and Helpers Tournament can delete events
@@ -1761,6 +1881,7 @@ if __name__ == "__main__":
     try:
         print("🚀 Starting Discord bot...")
         print("📡 Connecting to Discord...")
+        # Ensure tree commands are fully registered before running
         bot.run(token, log_handler=None)  # Disable default logging to reduce startup time
     except discord.LoginFailure:
         print("❌ Invalid Discord token. Please check your bot token.")
