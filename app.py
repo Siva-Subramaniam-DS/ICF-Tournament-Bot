@@ -936,7 +936,8 @@ async def help_command(interaction: discord.Interaction):
         value=(
             "`/team_balance` - Balance teams by player levels\n"
             "`/time` - Generate random match time (12:00-17:59 UTC)\n"
-            "`/choose` - Random choice from comma-separated options"
+            "`/choose` - Random choice from comma-separated options\n"
+            "`/general_tie_breaker` - Break a tie using highest total score"
         ),
         inline=False
     )
