@@ -923,7 +923,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="🏆 **Event Management**",
         value=(
-            "`/event-create` - Create tournament events (Organizers)\n"
+            "`/event-create` - Create tournament events (Organizers/Helpers Tournament)\n"
             "`/event-result` - Record event results (Organizers/Helpers Tournament)\n"
             "`/event-delete` - Delete scheduled events (Organizers/Helpers Tournament)"
         ),
@@ -1074,7 +1074,7 @@ async def event_create(
     
     # Check permissions
     if not has_event_create_permission(interaction):
-        await interaction.followup.send("❌ You need **Organizers** role to create events.", ephemeral=True)
+        await interaction.followup.send("❌ You need **Organizers** or **Helpers Tournament** role to create events.", ephemeral=True)
         return
     
     # Validate input parameters
