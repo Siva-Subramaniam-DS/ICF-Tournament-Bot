@@ -649,11 +649,14 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
             try:
                 # Try multiple font options for better visibility
                 font_options = [
-                    "C:/Windows/Fonts/impact.ttf",      # Impact - very bold and visible
-                    "C:/Windows/Fonts/arialbd.ttf",     # Arial Bold
-                    "C:/Windows/Fonts/calibrib.ttf",    # Calibri Bold
+                    "C:/Windows/Fonts/segoeuib.ttf",    # Segoe UI Bold (good Unicode coverage)
+                    "C:/Windows/Fonts/arialuni.ttf",    # Arial Unicode MS (broad glyph support, if installed)
+                    "C:/Windows/Fonts/segoeui.ttf",     # Segoe UI Regular
                     "C:/Windows/Fonts/verdanab.ttf",    # Verdana Bold
                     "C:/Windows/Fonts/trebucbd.ttf",    # Trebuchet MS Bold
+                    "C:/Windows/Fonts/arialbd.ttf",     # Arial Bold
+                    "C:/Windows/Fonts/calibrib.ttf",    # Calibri Bold
+                    "C:/Windows/Fonts/impact.ttf",      # Impact
                 ]
                 
                 font_path = None
@@ -664,11 +667,12 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 
                 if font_path:
                     # Use larger, more visible font sizes
-                    font_title = ImageFont.truetype(font_path, int(height * 0.14))   # Title font (even bigger)
-                    font_large = ImageFont.truetype(font_path, int(height * 0.18))   # Round number (much bigger)
-                    font_medium = ImageFont.truetype(font_path, int(height * 0.12))  # VS text (bigger)
-                    font_small = ImageFont.truetype(font_path, int(height * 0.09))   # Time and date (bigger)
-                    font_tiny = ImageFont.truetype(font_path, int(height * 0.07))    # Tournament name (bigger)
+                    # Slightly reduce sizes for faster layout and better fit
+                    font_title = ImageFont.truetype(font_path, int(height * 0.13))
+                    font_large = ImageFont.truetype(font_path, int(height * 0.17))
+                    font_medium = ImageFont.truetype(font_path, int(height * 0.11))
+                    font_small = ImageFont.truetype(font_path, int(height * 0.085))
+                    font_tiny = ImageFont.truetype(font_path, int(height * 0.065))
                 else:
                     raise Exception("No suitable font found")
                     
