@@ -1773,14 +1773,14 @@ async def exchange_judge(
         await interaction.response.send_message("❌ You need Head Organizer, Head Helper or Helper Team role to exchange judges.", ephemeral=True)
         return
 
-    # Validate roles of old/new judges
-    judge_role = discord.utils.get(interaction.guild.roles, id=ROLE_IDS["judge"]) if interaction.guild else None
-    if judge_role:
-        if judge_role not in old_judge.roles:
-            await interaction.response.send_message("❌ Old judge does not have the Judge role.", ephemeral=True)
+    # Validate roles of old/new helpers (replace Judge role with Helpers Tournament role)
+    helpers_role = discord.utils.get(interaction.guild.roles, id=ROLE_IDS["helpers_tournament"]) if interaction.guild else None
+    if helpers_role:
+        if helpers_role not in old_judge.roles:
+            await interaction.response.send_message("❌ The current assignee does not have the Helpers Tournament role.", ephemeral=True)
             return
-        if judge_role not in new_judge.roles:
-            await interaction.response.send_message("❌ New judge must have the Judge role.", ephemeral=True)
+        if helpers_role not in new_judge.roles:
+            await interaction.response.send_message("❌ The new assignee must have the Helpers Tournament role.", ephemeral=True)
             return
 
     # Determine target events in the current channel
