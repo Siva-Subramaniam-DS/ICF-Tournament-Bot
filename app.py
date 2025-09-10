@@ -1375,6 +1375,23 @@ async def event_result(
 
     # Winner-only summary removed per request
 
+    # Post staff attendance in match_reports channel
+    try:
+        reports_channel = interaction.guild.get_channel(CHANNEL_IDS["match_reports"])
+        if reports_channel:
+            attendance_text = f"🏅 {winner.display_name} Vs {loser.display_name}\n"
+            attendance_text += f"**Round :** {round}\n\n"
+            attendance_text += f"**Results**\n"
+            attendance_text += f"🏆 {winner.display_name} ({winner_score}) Vs ({loser_score}) {loser.display_name} 💀\n\n"
+            attendance_text += f"**Staffs**\n"
+            attendance_text += f"• Judge: {interaction.user.mention} `@{interaction.user.name}`"
+
+            await reports_channel.send(attendance_text)
+        else:
+            print("⚠️ Could not find match reports channel.")
+    except Exception as e:
+        print(f"⚠️ Could not post in match reports channel: {e}")
+
 @tree.command(name="time", description="Get a random match time from fixed 30-min slots (12:00-17:00 UTC)")
 async def time(interaction: discord.Interaction):
     """Pick a random time from 30-minute slots between 12:00 and 17:00 UTC and show all slots."""
