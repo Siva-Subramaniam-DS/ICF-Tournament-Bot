@@ -1260,8 +1260,25 @@ async def event(interaction: discord.Interaction, action: app_commands.Choice[st
     minute="Minute of the event (0-59)",
     date="Date of the event",
     month="Month of the event",
-    round="Round number",
+    round="Round label",
     tournament="Tournament name (e.g. King of the Seas, Summer Cup, etc.)"
+)
+@app_commands.choices(
+    round=[
+        app_commands.Choice(name="R1", value="R1"),
+        app_commands.Choice(name="R2", value="R2"),
+        app_commands.Choice(name="R3", value="R3"),
+        app_commands.Choice(name="R4", value="R4"),
+        app_commands.Choice(name="R5", value="R5"),
+        app_commands.Choice(name="R6", value="R6"),
+        app_commands.Choice(name="R7", value="R7"),
+        app_commands.Choice(name="R8", value="R8"),
+        app_commands.Choice(name="R9", value="R9"),
+        app_commands.Choice(name="R10", value="R10"),
+        app_commands.Choice(name="Qualifier", value="Qualifier"),
+        app_commands.Choice(name="Semi Final", value="Semi Final"),
+        app_commands.Choice(name="Final", value="Final"),
+    ]
 )
 async def event_create(
     interaction: discord.Interaction,
@@ -1271,7 +1288,7 @@ async def event_create(
     minute: int,
     date: int,
     month: int,
-    round: int,
+    round: app_commands.Choice[str],
     tournament: str
 ):
     """Creates an event with the specified parameters"""
@@ -1311,13 +1328,16 @@ async def event_create(
     # Calculate time differences and format times
     time_info = calculate_time_difference(event_datetime)
     
+    # Resolve round label from choice
+    round_label = round.value if isinstance(round, app_commands.Choice) else str(round)
+    
     # Store event data for reminders
     scheduled_events[event_id] = {
-        'title': f"Round {round} Match",
+        'title': f"Round {round_label} Match",
         'datetime': event_datetime,
         'time_str': time_info['utc_time'],
         'date_str': f"{date:02d}/{month:02d}",
-        'round': f"Round {round}",
+        'round': round_label,
         'minutes_left': time_info['minutes_remaining'],
         'tournament': tournament,
         'judge': None,
@@ -1338,9 +1358,9 @@ async def event_create(
             # Create poster with text overlays
             poster_image = create_event_poster(
                 template_image, 
-                round, 
-                team_1_captain.display_name, 
-                team_2_captain.display_name, 
+                round_label, 
+                team_1_captain.name, 
+                team_2_captain.name, 
                 time_info['utc_time_simple'],
                 f"{date:02d}/{month:02d}/{current_year}",
                 tournament
@@ -1371,7 +1391,7 @@ async def event_create(
         value=f"**Tournament:** {tournament}\n"
               f"**UTC Time:** {time_info['utc_time']}\n"
               f"**Local Time:** <t:{timestamp}:F> (<t:{timestamp}:R>)\n"
-              f"**Round:** Round {round}\n"
+              f"**Round:** {round_label}\n"
               f"**Channel:** {interaction.channel.mention}",
         inline=False
     )
@@ -1417,7 +1437,7 @@ async def event_create(
     
     # Post in Take-Schedule channel (with button)
     try:
-        schedule_channel = interaction.guild.get_channel(CHANNEL_IDS["schedules"])
+        schedule_channel = interaction.guild.get_channel(CHANNEL_IDS["take_schedule"])
         if schedule_channel:
             judge_ping = f"<@&{ROLE_IDS['helpers_tournament']}> <@&{ROLE_IDS['organizers']}>"
             if poster_image:
