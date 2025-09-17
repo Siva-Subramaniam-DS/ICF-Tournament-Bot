@@ -1435,9 +1435,9 @@ async def event_create(
     # Send confirmation to user
     await interaction.followup.send("✅ Event created and posted to both channels! Reminder will ping captains 10 minutes before start.", ephemeral=True)
     
-    # Post in Take-Schedule channel (with button)
+    # Post in schedules channel (with button)
     try:
-        schedule_channel = interaction.guild.get_channel(CHANNEL_IDS["take_schedule"])
+        schedule_channel = interaction.guild.get_channel(CHANNEL_IDS["schedules"])
         if schedule_channel:
             judge_ping = f"<@&{ROLE_IDS['helpers_tournament']}> <@&{ROLE_IDS['organizers']}>"
             if poster_image:
@@ -1451,9 +1451,9 @@ async def event_create(
             scheduled_events[event_id]['schedule_message_id'] = schedule_message.id
             scheduled_events[event_id]['schedule_channel_id'] = schedule_channel.id
         else:
-            await interaction.followup.send("⚠️ Could not find Take-Schedule channel.", ephemeral=True)
+            await interaction.followup.send("⚠️ Could not find schedules channel.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"⚠️ Could not post in Take-Schedule channel: {e}", ephemeral=True)
+        await interaction.followup.send(f"⚠️ Could not post in schedules channel: {e}", ephemeral=True)
     
     # Post in the channel where command was used (without button)
     try:
