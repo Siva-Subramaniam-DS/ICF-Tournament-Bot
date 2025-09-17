@@ -7,10 +7,13 @@ discord.py>=2.3.0
 python-dotenv>=1.0.0
 
 # Date and time utilities
-pytz>=2024.1
+pytz>=2023.3
 
 # Image processing (lightweight)
 Pillow>=10.0.0
+
+# HTTP requests for Google Fonts API
+requests>=2.31.0
 
 # Essential only - removed heavy dependencies that might cause timeout:
 # - pandas (large dependency)
