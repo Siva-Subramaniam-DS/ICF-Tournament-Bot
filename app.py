@@ -24,6 +24,9 @@ from PIL import Image, ImageDraw, ImageFont
 # Removed pilmoji import due to dependency issues
 import io
 import json
+from pathlib import Path
+import requests
+import tempfile
 
 # Load environment variables
 load_dotenv()
@@ -97,6 +100,9 @@ def save_scheduled_events():
 
 # Track per-event reminder tasks (for cancellation/update)
 reminder_tasks = {}
+
+# Track per-event cleanup tasks (to remove finished events after result)
+cleanup_tasks = {}
 
 # Store judge assignments to prevent overloading
 judge_assignments = {}  # {judge_id: [event_ids]}
@@ -304,7 +310,7 @@ class TakeScheduleButton(View):
                 await interaction.followup.send("❌ Failed to update embed with judge information.", ephemeral=True)
                 return
             
-            # Update the message
+            # Update the message with the updated take button only
             await interaction.message.edit(embed=embed, view=self)
             
             # Send success message
@@ -601,6 +607,190 @@ async def schedule_event_reminder_v2(event_id: str, team1_captain: discord.Membe
     except Exception as e:
         print(f"Error in schedule_event_reminder_v2 for event {event_id}: {e}")
 
+async def schedule_event_cleanup(event_id: str, delay_hours: int = 36):
+    """Schedule cleanup to remove an event after delay_hours (default 36h)."""
+    try:
+        if event_id not in scheduled_events:
+            return
+        delay_seconds = delay_hours * 3600
+
+        async def cleanup_task():
+            try:
+                await asyncio.sleep(delay_seconds)
+                data = scheduled_events.get(event_id)
+                if not data:
+                    return
+                # Delete original schedule message if known
+                try:
+                    guilds = bot.guilds
+                    for guild in guilds:
+                        ch_id = data.get('schedule_channel_id')
+                        msg_id = data.get('schedule_message_id')
+                        if ch_id and msg_id:
+                            channel = guild.get_channel(ch_id)
+                            if channel:
+                                try:
+                                    msg = await channel.fetch_message(msg_id)
+                                    await msg.delete()
+                                except discord.NotFound:
+                                    pass
+                                except Exception as e:
+                                    print(f"Error deleting schedule message for {event_id}: {e}")
+                except Exception as e:
+                    print(f"Guild/channel fetch error during cleanup for {event_id}: {e}")
+
+                # Clean up poster file if any
+                try:
+                    poster_path = data.get('poster_path')
+                    if poster_path and os.path.exists(poster_path):
+                        os.remove(poster_path)
+                except Exception as e:
+                    print(f"Poster cleanup error for {event_id}: {e}")
+
+                # Remove any reminder task
+                try:
+                    if event_id in reminder_tasks:
+                        reminder_tasks[event_id].cancel()
+                        del reminder_tasks[event_id]
+                except Exception:
+                    pass
+
+                # Finally remove from scheduled events and persist
+                try:
+                    if event_id in scheduled_events:
+                        del scheduled_events[event_id]
+                        save_scheduled_events()
+                except Exception as e:
+                    print(f"Error removing event {event_id} in cleanup: {e}")
+            except asyncio.CancelledError:
+                print(f"Cleanup task for event {event_id} was cancelled")
+            except Exception as e:
+                print(f"Error in cleanup task for event {event_id}: {e}")
+
+        # Cancel existing cleanup if any and schedule new
+        if event_id in cleanup_tasks:
+            try:
+                cleanup_tasks[event_id].cancel()
+            except Exception:
+                pass
+
+        cleanup_tasks[event_id] = asyncio.create_task(cleanup_task())
+        print(f"Cleanup scheduled for event {event_id} in {delay_hours} hours")
+    except Exception as e:
+        print(f"Error scheduling cleanup for event {event_id}: {e}")
+
+# Google Fonts API Integration
+def download_google_font(font_family: str, font_style: str = "regular", font_weight: str = "400") -> str:
+    """Download a font from Google Fonts API and return the local file path"""
+    try:
+        # Google Fonts API URL
+        api_url = f"https://fonts.googleapis.com/css2?family={font_family.replace(' ', '+')}:wght@{font_weight}"
+        
+        # Add style parameter if not regular
+        if font_style != "regular":
+            api_url += f"&style={font_style}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(api_url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        # Parse CSS to get font URL
+        css_content = response.text
+        font_urls = re.findall(r'url\((https://[^)]+\.woff2?)\)', css_content)
+        
+        if not font_urls:
+            print(f"No font URLs found in CSS for {font_family}")
+            return None
+        
+        # Download the first font file (usually woff2)
+        font_url = font_urls[0]
+        font_response = requests.get(font_url, timeout=15)
+        font_response.raise_for_status()
+        
+        # Create temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.woff2')
+        temp_file.write(font_response.content)
+        temp_file.close()
+        
+        print(f"Downloaded Google Font: {font_family} -> {temp_file.name}")
+        return temp_file.name
+        
+    except Exception as e:
+        print(f"Error downloading Google Font {font_family}: {e}")
+        return None
+
+def get_font_with_fallbacks(font_name: str, size: int, font_style: str = "regular") -> ImageFont.FreeTypeFont:
+    """Get a font with multiple fallback options including Google Fonts"""
+    font_candidates = []
+    
+    # 1. Try Google Fonts first
+    try:
+        google_font_path = download_google_font(font_name, font_style)
+        if google_font_path:
+            font_candidates.append(google_font_path)
+    except Exception as e:
+        print(f"Google Fonts failed for {font_name}: {e}")
+    
+    # 2. Try local bundled fonts
+    local_fonts = [
+        str(Path("Fonts") / "capture_it" / "Capture it.ttf"),
+        str(Path("Fonts") / "ds_digital" / "DS-DIGIB.TTF"),
+        str(Path("Fonts") / "ds_digital" / "DS-DIGII.TTF"),
+        str(Path("Fonts") / "ds_digital" / "DS-DIGI.TTF"),
+    ]
+    font_candidates.extend(local_fonts)
+    
+    # 3. Try system fonts
+    system_fonts = [
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/arialbd.ttf", 
+        "C:/Windows/Fonts/impact.ttf",
+        "C:/Windows/Fonts/consola.ttf",
+        "C:/Windows/Fonts/trebucbd.ttf",
+    ]
+    font_candidates.extend(system_fonts)
+    
+    # Try each font candidate
+    for font_path in font_candidates:
+        try:
+            if os.path.exists(font_path):
+                font = ImageFont.truetype(font_path, size)
+                print(f"Successfully loaded font: {font_path}")
+                return font
+        except Exception as e:
+            print(f"Failed to load font {font_path}: {e}")
+            continue
+    
+    # Final fallback to default font
+    print(f"All fonts failed, using default font for size {size}")
+    try:
+        return ImageFont.load_default().font_variant(size=size)
+    except:
+        return ImageFont.load_default()
+
+def sanitize_username_for_poster(username: str) -> str:
+    """Convert Discord display names to poster-friendly ASCII by stripping emojis and fancy Unicode.
+
+    - Normalizes to NFKD and drops non-ASCII codepoints
+    - Collapses repeated whitespace and trims ends
+    - Falls back to 'Player' if empty after sanitization
+    """
+    try:
+        import unicodedata
+        # Normalize and strip accents/fancy letters
+        normalized = unicodedata.normalize('NFKD', str(username))
+        ascii_only = normalized.encode('ascii', 'ignore').decode('ascii')
+        # Remove remaining characters that might be control or non-printable
+        ascii_only = re.sub(r"[^\x20-\x7E]", "", ascii_only)
+        # Collapse whitespace
+        ascii_only = re.sub(r"\s+", " ", ascii_only).strip()
+        return ascii_only if ascii_only else "Player"
+    except Exception:
+        return str(username) if username else "Player"
+
 def get_random_template():
     """Get a random template image from the Templates folder"""
     template_path = "Templates"
@@ -617,10 +807,19 @@ def get_random_template():
     return None
 
 def create_event_poster(template_path: str, round_num: int, team1_captain: str, team2_captain: str, utc_time: str, date_str: str = None, tournament_name: str = "ICF Tournament", server_name: str = "ICF Tournament Bot") -> str:
-    """Create event poster with text overlays"""
+    """Create event poster with text overlays using Google Fonts and improved error handling"""
+    print(f"Creating poster with template: {template_path}")
+    
     try:
+        # Validate template path
+        if not os.path.exists(template_path):
+            print(f"Template file not found: {template_path}")
+            return None
+            
         # Open the template image
         with Image.open(template_path) as img:
+            print(f"Opened template image: {img.size}, mode: {img.mode}")
+            
             # Convert to RGBA if needed
             if img.mode != 'RGBA':
                 img = img.convert('RGBA')
@@ -635,81 +834,54 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 new_width = int(width * ratio)
                 new_height = int(height * ratio)
                 img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                print(f"Resized image to: {new_width}x{new_height}")
             
             # Create a copy to work with
             poster = img.copy()
             draw = ImageDraw.Draw(poster)
             
-            # Use regular PIL drawing (emojis will be displayed as text)
-            
-            # Get image dimensions
+            # Get final image dimensions
             width, height = poster.size
             
-            # Try to load fonts with better visibility and readability
-            try:
-                # Try multiple font options for better visibility
-                font_options = [
-                    "C:/Windows/Fonts/segoeuib.ttf",    # Segoe UI Bold (good Unicode coverage)
-                    "C:/Windows/Fonts/arialuni.ttf",    # Arial Unicode MS (broad glyph support, if installed)
-                    "C:/Windows/Fonts/segoeui.ttf",     # Segoe UI Regular
-                    "C:/Windows/Fonts/verdanab.ttf",    # Verdana Bold
-                    "C:/Windows/Fonts/trebucbd.ttf",    # Trebuchet MS Bold
-                    "C:/Windows/Fonts/arialbd.ttf",     # Arial Bold
-                    "C:/Windows/Fonts/calibrib.ttf",    # Calibri Bold
-                    "C:/Windows/Fonts/impact.ttf",      # Impact
-                ]
-                
-                font_path = None
-                for font_option in font_options:
-                    if os.path.exists(font_option):
-                        font_path = font_option
-                        break
-                
-                if font_path:
-                    # Use larger, more visible font sizes
-                    # Slightly reduce sizes for faster layout and better fit
-                    font_title = ImageFont.truetype(font_path, int(height * 0.13))
-                    font_large = ImageFont.truetype(font_path, int(height * 0.17))
-                    font_medium = ImageFont.truetype(font_path, int(height * 0.11))
-                    font_small = ImageFont.truetype(font_path, int(height * 0.085))
-                    font_tiny = ImageFont.truetype(font_path, int(height * 0.065))
-                else:
-                    raise Exception("No suitable font found")
-                    
-            except:
-                try:
-                    # Fallback to regular Arial with bigger sizes
-                    font_title = ImageFont.truetype("arial.ttf", int(height * 0.14))
-                    font_large = ImageFont.truetype("arial.ttf", int(height * 0.18))
-                    font_medium = ImageFont.truetype("arial.ttf", int(height * 0.12))
-                    font_small = ImageFont.truetype("arial.ttf", int(height * 0.09))
-                    font_tiny = ImageFont.truetype("arial.ttf", int(height * 0.07))
-                except:
-                    # Final fallback to default font with larger sizes
-                    try:
-                        font_title = ImageFont.load_default().font_variant(size=int(height * 0.14))
-                        font_large = ImageFont.load_default().font_variant(size=int(height * 0.18))
-                        font_medium = ImageFont.load_default().font_variant(size=int(height * 0.12))
-                        font_small = ImageFont.load_default().font_variant(size=int(height * 0.09))
-                        font_tiny = ImageFont.load_default().font_variant(size=int(height * 0.07))
-                    except:
-                        font_title = ImageFont.load_default()
-                        font_large = ImageFont.load_default()
-                        font_medium = ImageFont.load_default()
-                        font_small = ImageFont.load_default()
-                        font_tiny = ImageFont.load_default()
+            # Load fonts using the new system with Google Fonts integration
+            print("Loading fonts...")
             
-            # Define colors for clean visibility without backgrounds
+            # Define font sizes based on image height (reduced for better fit)
+            title_size = int(height * 0.10)
+            round_size = int(height * 0.14)
+            vs_size = int(height * 0.09)
+            time_size = int(height * 0.07)
+            tiny_size = int(height * 0.05)
+            
+            # Load fonts with Google Fonts fallback
+            try:
+                # Try Google Fonts first, then fallback to local/system fonts
+                font_title = get_font_with_fallbacks("Orbitron", title_size, "bold")  # Modern display font
+                font_round = get_font_with_fallbacks("Orbitron", round_size, "bold")  # Same for round
+                # Use a unique bundled font for player names so styling is consistent regardless of Discord nickname styling
+                font_vs = get_font_with_fallbacks("Capture it", vs_size, "bold")       # Unique display font from Fonts/capture_it
+                font_time = get_font_with_fallbacks("Share Tech Mono", time_size)     # Monospace for time
+                font_tiny = get_font_with_fallbacks("Roboto", tiny_size)              # Small text
+                
+                print("Fonts loaded successfully")
+                
+            except Exception as font_error:
+                print(f"Font loading error: {font_error}")
+                # Ultimate fallback to default fonts
+                font_title = ImageFont.load_default()
+                font_round = ImageFont.load_default()
+                font_vs = ImageFont.load_default()
+                font_time = ImageFont.load_default()
+                font_tiny = ImageFont.load_default()
+            
+            # Define colors for clean visibility
             text_color = (255, 255, 255)  # Bright white
             outline_color = (0, 0, 0)     # Pure black
             yellow_color = (255, 255, 0)  # Bright yellow for important text
             
-            # Simple helper function with outline only (no background)
+            # Helper function to draw text with outline
             def draw_text_with_outline(text, x, y, font, text_color=text_color, use_yellow=False):
-                # Convert coordinates to integers
                 x, y = int(x), int(y)
-                
-                # Choose text color
                 final_text_color = yellow_color if use_yellow else text_color
                 
                 # Draw thick black outline for visibility
@@ -717,100 +889,106 @@ def create_event_poster(template_path: str, round_num: int, team1_captain: str, 
                 for dx in range(-outline_width, outline_width + 1):
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
-                            draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
+                            try:
+                                draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
+                            except Exception as e:
+                                print(f"Error drawing outline: {e}")
                 
                 # Draw main text on top
-                draw.text((x, y), text, font=font, fill=final_text_color)
+                try:
+                    draw.text((x, y), text, font=font, fill=final_text_color)
+                except Exception as e:
+                    print(f"Error drawing main text: {e}")
             
-            def draw_emoji_text_with_outline(text, x, y, font, text_color=text_color):
-                # Convert coordinates to integers
-                x, y = int(x), int(y)
-                
-                # Draw thick black outline
-                outline_width = 3
-                for dx in range(-outline_width, outline_width + 1):
-                    for dy in range(-outline_width, outline_width + 1):
-                        if dx != 0 or dy != 0:
-                            draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
-                
-                # Draw main text on top
-                draw.text((x, y), text, font=font, fill=text_color)
-            
-            # Add ICF logo if available
+            # Add server name text (top center)
             try:
-                logo_path = "Logo_ICF_2025_400.png"
-                if os.path.exists(logo_path):
-                    with Image.open(logo_path) as logo_img:
-                        # Resize logo to fit nicely (max 15% of poster height)
-                        logo_max_height = int(height * 0.15)
-                        logo_width, logo_height = logo_img.size
-                        if logo_height > logo_max_height:
-                            ratio = logo_max_height / logo_height
-                            new_logo_width = int(logo_width * ratio)
-                            logo_img = logo_img.resize((new_logo_width, logo_max_height), Image.Resampling.LANCZOS)
-                        
-                        # Position logo at top center
-                        logo_x = (width - logo_img.width) // 2
-                        logo_y = int(height * 0.05)
-                        
-                        # Paste logo onto poster
-                        if logo_img.mode == 'RGBA':
-                            poster.paste(logo_img, (logo_x, logo_y), logo_img)
-                        else:
-                            poster.paste(logo_img, (logo_x, logo_y))
+                server_text = server_name
+                server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
+                server_width = server_bbox[2] - server_bbox[0]
+                server_x = (width - server_width) // 2
+                server_y = int(height * 0.08)
+                draw_text_with_outline(server_text, server_x, server_y, font_title)
+                print(f"Added server name: {server_text}")
             except Exception as e:
-                print(f"Error adding logo: {e}")
+                print(f"Error adding server name: {e}")
             
-            # Add server name text (below logo, center, bold)
-            server_text = server_name
-            server_bbox = draw.textbbox((0, 0), server_text, font=font_title)
-            server_width = server_bbox[2] - server_bbox[0]
-            server_x = (width - server_width) // 2
-            server_y = int(height * 0.22)  # Moved down to accommodate logo
-            draw_text_with_outline(server_text, server_x, server_y, font_title)
+            # Add Round text (center) - use yellow for emphasis
+            try:
+                round_text = f"ROUND {round_num}"
+                round_bbox = draw.textbbox((0, 0), round_text, font=font_round)
+                round_width = round_bbox[2] - round_bbox[0]
+                round_x = (width - round_width) // 2
+                round_y = int(height * 0.35)
+                draw_text_with_outline(round_text, round_x, round_y, font_round, use_yellow=True)
+                print(f"Added round text: {round_text}")
+            except Exception as e:
+                print(f"Error adding round text: {e}")
             
-            # Add Round text (center) - use yellow for emphasis with more spacing
-            round_text = f"ROUND {round_num}"
-            round_bbox = draw.textbbox((0, 0), round_text, font=font_large)
-            round_width = round_bbox[2] - round_bbox[0]
-            round_x = (width - round_width) // 2
-            round_y = int(height * 0.40)  # Adjusted for logo space
-            draw_text_with_outline(round_text, round_x, round_y, font_large, use_yellow=True)
+            # Add Captain vs Captain text (center)
+            try:
+                left_name_text = sanitize_username_for_poster(team1_captain)
+                vs_core = " VS "
+                right_name_text = sanitize_username_for_poster(team2_captain)
+
+                # Measure text components to center the whole line
+                left_box = draw.textbbox((0, 0), left_name_text, font=font_vs)
+                vs_box = draw.textbbox((0, 0), vs_core, font=font_vs)
+                right_box = draw.textbbox((0, 0), right_name_text, font=font_vs)
+                
+                total_width = (left_box[2] - left_box[0]) + (vs_box[2] - vs_box[0]) + (right_box[2] - right_box[0])
+                current_x = (width - total_width) // 2
+                vs_y = int(height * 0.55)
+
+                # Draw left name
+                draw_text_with_outline(left_name_text, current_x, vs_y, font_vs)
+                current_x += (left_box[2] - left_box[0])
+                
+                # Draw VS
+                draw_text_with_outline(vs_core, current_x, vs_y, font_vs, use_yellow=False)
+                current_x += (vs_box[2] - vs_box[0])
+                
+                # Draw right name
+                draw_text_with_outline(right_name_text, current_x, vs_y, font_vs)
+                
+                print(f"Added VS text: {left_name_text} VS {right_name_text}")
+            except Exception as e:
+                print(f"Error adding VS text: {e}")
             
-            # Add Captain vs Captain text (center) with more spacing
-            vs_text = f"{team1_captain} VS {team2_captain}"
-            vs_bbox = draw.textbbox((0, 0), vs_text, font=font_medium)
-            vs_width = vs_bbox[2] - vs_bbox[0]
-            vs_x = (width - vs_width) // 2
-            vs_y = int(height * 0.58)  # Adjusted for logo space
-            draw_text_with_outline(vs_text, vs_x, vs_y, font_medium)
-            
-            # Add date (if provided) with more spacing
+            # Add date (if provided)
             if date_str:
-                date_text = f"📅 {date_str}"
-                date_bbox = draw.textbbox((0, 0), date_text, font=font_small)
-                date_width = date_bbox[2] - date_bbox[0]
-                date_x = (width - date_width) // 2
-                date_y = int(height * 0.72)  # More space between captains and date
-                draw_emoji_text_with_outline(date_text, date_x, date_y, font_small)
+                try:
+                    date_text = f"DATE:  {date_str}"
+                    date_bbox = draw.textbbox((0, 0), date_text, font=font_time)
+                    date_width = date_bbox[2] - date_bbox[0]
+                    date_x = (width - date_width) // 2
+                    date_y = int(height * 0.72)
+                    draw_text_with_outline(date_text, date_x, date_y, font_time)
+                    print(f"Added date: {date_text}")
+                except Exception as e:
+                    print(f"Error adding date: {e}")
             
-            # Add UTC time with more spacing
-            time_text = f"🕐 {utc_time}"
-            time_bbox = draw.textbbox((0, 0), time_text, font=font_small)
-            time_width = time_bbox[2] - time_bbox[0]
-            time_x = (width - time_width) // 2
-            time_y = int(height * 0.82) if date_str else int(height * 0.75)  # More space between date and time
-            draw_emoji_text_with_outline(time_text, time_x, time_y, font_small)
+            # Add UTC time
+            try:
+                time_text = f"TIME:  {utc_time}"
+                time_bbox = draw.textbbox((0, 0), time_text, font=font_time)
+                time_width = time_bbox[2] - time_bbox[0]
+                time_x = (width - time_width) // 2
+                time_y = int(height * 0.82) if date_str else int(height * 0.75)
+                draw_text_with_outline(time_text, time_x, time_y, font_time)
+                print(f"Added time: {time_text}")
+            except Exception as e:
+                print(f"Error adding time: {e}")
             
-            # "MATCH SCHEDULED" text removed as requested
-            
-            # Save the modified image (no overlay compositing needed)
+            # Save the modified image
             output_path = f"temp_poster_{int(datetime.datetime.now().timestamp())}.png"
             poster.save(output_path, "PNG")
+            print(f"Poster saved successfully: {output_path}")
             return output_path
             
     except Exception as e:
-        print(f"Error creating poster: {e}")
+        print(f"Critical error creating poster: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def calculate_time_difference(event_datetime: datetime.datetime, user_timezone: str = None) -> dict:
@@ -891,6 +1069,30 @@ async def on_ready():
     # Load tournament rules from file
     load_rules()
     
+    # Reschedule cleanups for any events already marked finished_on if needed (optional)
+    try:
+        for ev_id, data in list(scheduled_events.items()):
+            # If previously scheduled cleanup exists, skip (it won't persist); we don't know result time here
+            # Optionally: clean up events older than 7 days to avoid clutter
+            try:
+                dt = data.get('datetime')
+                if isinstance(dt, datetime.datetime):
+                    age_days = (datetime.datetime.now() - dt).days
+                    if age_days >= 7:
+                        # Hard cleanup very old events
+                        if ev_id in reminder_tasks:
+                            try:
+                                reminder_tasks[ev_id].cancel()
+                                del reminder_tasks[ev_id]
+                            except Exception:
+                                pass
+                        del scheduled_events[ev_id]
+            except Exception:
+                pass
+        save_scheduled_events()
+    except Exception as e:
+        print(f"Startup cleanup sweep error: {e}")
+    
     # Sync commands with timeout handling
     try:
         print("🔄 Syncing slash commands...")
@@ -941,7 +1143,8 @@ async def help_command(interaction: discord.Interaction):
             "`/team_balance` - Balance teams by player levels\n"
             "`/time` - Generate random match time (12:00-17:59 UTC)\n"
             "`/choose` - Random choice from comma-separated options\n"
-            "`/general_tie_breaker` - Break a tie using highest total score"
+            "`/general_tie_breaker` - Break a tie using highest total score\n"
+            "`/unassigned_events` - List events without judges (Organizers/Helpers Tournament)"
         ),
         inline=False
     )
@@ -1142,6 +1345,10 @@ async def event_create(
                 f"{date:02d}/{month:02d}/{current_year}",
                 tournament
             )
+            if poster_image:
+                # Keep poster path for later cleanup/deletion
+                scheduled_events[event_id]['poster_path'] = poster_image
+                save_scheduled_events()
         except Exception as e:
             print(f"Error creating poster: {e}")
             poster_image = None
@@ -1392,6 +1599,31 @@ async def event_result(
     except Exception as e:
         print(f"⚠️ Could not post in match reports channel: {e}")
 
+    # Schedule auto-cleanup of matching events in this channel after 36 hours
+    try:
+        current_channel_id = interaction.channel.id if interaction.channel else None
+        matching_event_ids = []
+        for ev_id, data in scheduled_events.items():
+            if data.get('channel_id') == current_channel_id:
+                # Optional: further match by captains to be safer
+                try:
+                    t1 = getattr(data.get('team1_captain'), 'id', None)
+                    t2 = getattr(data.get('team2_captain'), 'id', None)
+                    if winner.id in (t1, t2) and loser.id in (t1, t2):
+                        matching_event_ids.append(ev_id)
+                except Exception:
+                    matching_event_ids.append(ev_id)
+
+        scheduled_any = False
+        for ev_id in matching_event_ids:
+            await schedule_event_cleanup(ev_id, delay_hours=36)
+            scheduled_any = True
+
+        if scheduled_any:
+            await interaction.followup.send("🧹 Auto-cleanup scheduled: Related event(s) will be removed after 36 hours.", ephemeral=True)
+    except Exception as e:
+        print(f"Error scheduling auto-cleanup after results: {e}")
+
 @tree.command(name="time", description="Get a random match time from fixed 30-min slots (12:00-17:00 UTC)")
 async def time(interaction: discord.Interaction):
     """Pick a random time from 30-minute slots between 12:00 and 17:00 UTC and show all slots."""
@@ -1516,6 +1748,86 @@ async def choose(interaction: discord.Interaction, options: str):
     embed.set_footer(text="Random Choice Generator • ICF Tournament Bot")
     
     await interaction.response.send_message(embed=embed)
+
+
+@tree.command(name="unassigned_events", description="List events without a judge assigned (Organizers/Helpers Tournament)")
+async def unassigned_events(interaction: discord.Interaction):
+    """Show all scheduled events that do not currently have a judge assigned."""
+    try:
+        # Allow Organizers and Helpers Tournament to view
+        organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"]) if interaction.user else None
+        helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"]) if interaction.user else None
+
+        if not (organizers_role or helpers_role):
+            await interaction.response.send_message("❌ You need Organizers or Helpers Tournament role to view unassigned events.", ephemeral=True)
+            return
+
+        # Build list of unassigned events
+        unassigned = []
+        for event_id, data in scheduled_events.items():
+            if not data.get('judge'):
+                unassigned.append((event_id, data))
+
+        # If none, inform
+        if not unassigned:
+            await interaction.response.send_message("✅ All events currently have a judge assigned.", ephemeral=True)
+            return
+
+        # Sort by datetime if present
+        try:
+            unassigned.sort(key=lambda x: x[1].get('datetime') or datetime.datetime.max)
+        except Exception:
+            pass
+
+        # Create embed summary
+        embed = discord.Embed(
+            title="📝 Unassigned Events",
+            description="Events without a judge. Use the message link to take the schedule.",
+            color=discord.Color.orange(),
+            timestamp=discord.utils.utcnow()
+        )
+
+        # Add up to 25 entries (Discord practical limit for a single embed field block)
+        lines = []
+        for idx, (ev_id, data) in enumerate(unassigned[:25], start=1):
+            round_label = data.get('round', 'Round')
+            date_str = data.get('date_str', 'N/A')
+            time_str = data.get('time_str', 'N/A')
+            ch_id = data.get('schedule_channel_id') or data.get('channel_id')
+            msg_id = data.get('schedule_message_id')
+            team1 = data.get('team1_captain')
+            team2 = data.get('team2_captain')
+            team1_name = getattr(team1, 'display_name', 'Unknown') if team1 else 'Unknown'
+            team2_name = getattr(team2, 'display_name', 'Unknown') if team2 else 'Unknown'
+
+            link = None
+            try:
+                if interaction.guild and ch_id and msg_id:
+                    link = f"https://discord.com/channels/{interaction.guild.id}/{ch_id}/{msg_id}"
+            except Exception:
+                link = None
+
+            if link:
+                line = f"{idx}. {team1_name} vs {team2_name} • {round_label} • {time_str} • {date_str}\n↪ {link}"
+            else:
+                line = f"{idx}. {team1_name} vs {team2_name} • {round_label} • {time_str} • {date_str}"
+            lines.append(line)
+
+        embed.add_field(
+            name=f"Available ({len(unassigned)})",
+            value="\n\n".join(lines),
+            inline=False
+        )
+
+        embed.set_footer(text="Use the link to open the original schedule and press Take Schedule.")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    except Exception as e:
+        print(f"Error in unassigned_events: {e}")
+        try:
+            await interaction.response.send_message("❌ An error occurred while fetching unassigned events.", ephemeral=True)
+        except Exception:
+            pass
 
 
 @tree.command(name="general_tie_breaker", description="To break a tie between two teams using the highest total score")
@@ -1913,123 +2225,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
         exit(1)
-
-@tree.command(name="general_tie_breaker", description="To break a tie between two teams using the highest total score")
-@app_commands.describe(
-    tm1_name="Name of the first team. By default, it is Alpha",
-    tm1_pl1_score="Score of the first player of the first team",
-    tm1_pl2_score="Score of the second player of the first team", 
-    tm1_pl3_score="Score of the third player of the first team",
-    tm1_pl4_score="Score of the fourth player of the first team",
-    tm1_pl5_score="Score of the fifth player of the first team",
-    tm2_name="Name of the second team. By default, it is Bravo",
-    tm2_pl1_score="Score of the first player of the second team",
-    tm2_pl2_score="Score of the second player of the second team",
-    tm2_pl3_score="Score of the third player of the second team",
-    tm2_pl4_score="Score of the fourth player of the second team",
-    tm2_pl5_score="Score of the fifth player of the second team"
-)
-async def general_tie_breaker(
-    interaction: discord.Interaction,
-    tm1_pl1_score: int,
-    tm1_pl2_score: int,
-    tm1_pl3_score: int,
-    tm1_pl4_score: int,
-    tm1_pl5_score: int,
-    tm2_pl1_score: int,
-    tm2_pl2_score: int,
-    tm2_pl3_score: int,
-    tm2_pl4_score: int,
-    tm2_pl5_score: int,
-    tm1_name: str = "Alpha",
-    tm2_name: str = "Bravo"
-):
-    """Break a tie between two teams using the highest total score"""
-    
-    # Check permissions - only organizers and helpers can use this command
-    if not has_event_create_permission(interaction):
-        await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to use tie breaker.", ephemeral=True)
-        return
-    
-    # Calculate team totals
-    tm1_total = tm1_pl1_score + tm1_pl2_score + tm1_pl3_score + tm1_pl4_score + tm1_pl5_score
-    tm2_total = tm2_pl1_score + tm2_pl2_score + tm2_pl3_score + tm2_pl4_score + tm2_pl5_score
-    
-    # Determine winner
-    if tm1_total > tm2_total:
-        winner = tm1_name
-        winner_total = tm1_total
-        loser = tm2_name
-        loser_total = tm2_total
-        color = discord.Color.green()
-    elif tm2_total > tm1_total:
-        winner = tm2_name
-        winner_total = tm2_total
-        loser = tm1_name
-        loser_total = tm1_total
-        color = discord.Color.green()
-    else:
-        # Still tied
-        winner = "TIE"
-        winner_total = tm1_total
-        loser = ""
-        loser_total = tm2_total
-        color = discord.Color.orange()
-    
-    # Create result embed
-    embed = discord.Embed(
-        title="🏆 Tie Breaker Results",
-        description="Results based on highest total team score",
-        color=color,
-        timestamp=discord.utils.utcnow()
-    )
-    
-    # Team 1 scores
-    embed.add_field(
-        name=f"🔵 {tm1_name} Team",
-        value=f"Player 1: `{tm1_pl1_score}`\n"
-              f"Player 2: `{tm1_pl2_score}`\n"
-              f"Player 3: `{tm1_pl3_score}`\n"
-              f"Player 4: `{tm1_pl4_score}`\n"
-              f"Player 5: `{tm1_pl5_score}`\n"
-              f"**Total: {tm1_total}**",
-        inline=True
-    )
-    
-    # Team 2 scores
-    embed.add_field(
-        name=f"🔴 {tm2_name} Team",
-        value=f"Player 1: `{tm2_pl1_score}`\n"
-              f"Player 2: `{tm2_pl2_score}`\n"
-              f"Player 3: `{tm2_pl3_score}`\n"
-              f"Player 4: `{tm2_pl4_score}`\n"
-              f"Player 5: `{tm2_pl5_score}`\n"
-              f"**Total: {tm2_total}**",
-        inline=True
-    )
-    
-    # Add spacing
-    embed.add_field(name="\u200b", value="\u200b", inline=False)
-    
-    # Result
-    if winner == "TIE":
-        embed.add_field(
-            name="🤝 Final Result",
-            value=f"**STILL TIED!**\n"
-                  f"Both teams scored {tm1_total} points\n"
-                  f"Additional tie-breaking method needed",
-            inline=False
-        )
-    else:
-        embed.add_field(
-            name="🏆 Winner",
-            value=f"**{winner}** wins the tie breaker!\n"
-                  f"**{winner}**: {winner_total} points\n"
-                  f"**{loser}**: {loser_total} points\n"
-                  f"Difference: {abs(winner_total - loser_total)} points",
-            inline=False
-        )
-    
-    embed.set_footer(text=f"Tie Breaker • Calculated by {interaction.user.display_name}")
-    
-    await interaction.response.send_message(embed=embed)
