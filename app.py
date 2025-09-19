@@ -88,9 +88,21 @@ def save_scheduled_events():
             event_copy = event_data.copy()
             if 'datetime' in event_copy:
                 event_copy['datetime'] = event_copy['datetime'].isoformat()
+            
             # Remove non-serializable objects like discord.Member
             if 'judge' in event_copy:
                 event_copy['judge'] = None
+            if 'team1_captain' in event_copy:
+                # Store captain ID instead of Member object
+                if hasattr(event_copy['team1_captain'], 'id'):
+                    event_copy['team1_captain_id'] = event_copy['team1_captain'].id
+                event_copy['team1_captain'] = None
+            if 'team2_captain' in event_copy:
+                # Store captain ID instead of Member object
+                if hasattr(event_copy['team2_captain'], 'id'):
+                    event_copy['team2_captain_id'] = event_copy['team2_captain'].id
+                event_copy['team2_captain'] = None
+                
             data_to_save[event_id] = event_copy
         
         with open('scheduled_events.json', 'w') as f:
