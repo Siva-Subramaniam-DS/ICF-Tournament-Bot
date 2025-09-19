@@ -109,3 +109,15 @@ The ICF-Tournament-Bot is a Discord bot designed to manage and facilitate ICF (I
 3. WHEN assignments are made THEN the system SHALL clearly display who is assigned to what role
 4. IF actions are not permitted THEN the system SHALL explain why through clear error messages
 5. WHEN information is displayed THEN the system SHALL use consistent formatting and branding
+
+### Requirement 9
+
+**User Story:** As a tournament organizer, I want result commands to be posted in both the results channel and the originating channel, so that results are centrally tracked while maintaining visibility in the context where they were created.
+
+#### Acceptance Criteria
+
+1. WHEN a result command is created THEN the system SHALL post the result in the designated results channel
+2. WHEN a result command is created THEN the system SHALL also post a copy of the result in the channel where the command was originally executed
+3. WHEN results are posted in multiple locations THEN the system SHALL maintain consistent formatting and content across both posts
+4. IF the originating channel is the same as the results channel THEN the system SHALL post only once to avoid duplication
+5. WHEN dual posting occurs THEN the system SHALL ensure both posts are successfully delivered before confirming completion

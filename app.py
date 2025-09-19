@@ -108,6 +108,84 @@ cleanup_tasks = {}
 judge_assignments = {}  # {judge_id: [event_ids]}
 
 # ===========================================================================================
+# RESULT MANAGEMENT SYSTEM
+# ===========================================================================================
+
+class ResultManager:
+    """
+    Manages result posting with dual-channel functionality.
+    
+    This class handles posting tournament results to both the designated results channel
+    and the channel where the command was originally executed, with smart deduplication
+    to avoid posting twice to the same channel.
+    
+    Features:
+    - Dual-channel posting with deduplication
+    - File handling for screenshots and attachments
+    - Error handling and success reporting
+    - Consistent formatting across channels
+    """
+    
+    @staticmethod
+    def should_duplicate_post(origin_channel: discord.TextChannel, results_channel: discord.TextChannel) -> bool:
+        """Check if we should post to both channels (avoid duplication if same channel)"""
+        return origin_channel.id != results_channel.id
+    
+    @staticmethod
+    async def post_result_to_channel(channel: discord.TextChannel, embed: discord.Embed, files: list = None) -> bool:
+        """Post result to a specific channel, returns True if successful"""
+        try:
+            if files:
+                await channel.send(embed=embed, files=files)
+            else:
+                await channel.send(embed=embed)
+            return True
+        except Exception as e:
+            print(f"Error posting result to channel {channel.name}: {e}")
+            return False
+    
+    @staticmethod
+    async def post_result_dual_channel(
+        embed: discord.Embed, 
+        files: list,
+        origin_channel: discord.TextChannel,
+        results_channel: discord.TextChannel
+    ) -> tuple[bool, bool]:
+        """
+        Post result to both origin and results channels with deduplication.
+        Returns (results_channel_success, origin_channel_success)
+        """
+        results_success = False
+        origin_success = False
+        
+        # Always post to results channel first
+        try:
+            results_success = await ResultManager.post_result_to_channel(results_channel, embed, files)
+        except Exception as e:
+            print(f"Error posting to results channel: {e}")
+        
+        # Post to origin channel only if it's different from results channel
+        if ResultManager.should_duplicate_post(origin_channel, results_channel):
+            try:
+                # Create new file objects for the second post (files can only be used once)
+                files_copy = []
+                if files:
+                    for file in files:
+                        # Reset file pointer and create new file object
+                        file.fp.seek(0)
+                        file_copy = discord.File(file.fp, filename=file.filename)
+                        files_copy.append(file_copy)
+                
+                origin_success = await ResultManager.post_result_to_channel(origin_channel, embed, files_copy)
+            except Exception as e:
+                print(f"Error posting to origin channel: {e}")
+        else:
+            # Same channel, so we consider origin posting successful since we already posted to results
+            origin_success = results_success
+        
+        return results_success, origin_success
+
+# ===========================================================================================
 # RULE MANAGEMENT SYSTEM
 # ===========================================================================================
 
@@ -1130,7 +1208,7 @@ async def help_command(interaction: discord.Interaction):
         name="🏆 **Event Management**",
         value=(
             "`/event-create` - Create tournament events (Organizers/Helpers Tournament)\n"
-            "`/event-result` - Record event results (Organizers/Helpers Tournament)\n"
+            "`/event-result` - Record event results - posts to both Results channel and current channel (Organizers/Helpers Tournament)\n"
             "`/event-delete` - Delete scheduled events (Organizers/Helpers Tournament)"
         ),
         inline=False
@@ -1145,6 +1223,18 @@ async def help_command(interaction: discord.Interaction):
             "`/choose` - Random choice from comma-separated options\n"
             "`/general_tie_breaker` - Break a tie using highest total score\n"
             "`/unassigned_events` - List events without judges (Organizers/Helpers Tournament)"
+        ),
+        inline=False
+    )
+
+    # Result Posting Information
+    embed.add_field(
+        name="📋 **Result Posting Details**",
+        value=(
+            "When using `/event-result`, results are automatically posted to:\n"
+            "• **Results Channel** - For centralized tournament tracking\n"
+            "• **Current Channel** - For context where the command was used\n"
+            "• If both channels are the same, only one post is made to avoid duplication"
         ),
         inline=False
     )
@@ -1401,8 +1491,8 @@ async def event_create(
     
     # Captains Section
     captains_text = f"**Captains**\n"
-    captains_text += f"▪ Team1 Captain: {team_1_captain.mention}\n"
-    captains_text += f"▪ Team2 Captain: {team_2_captain.mention}"
+    captains_text += f"▪ Team1 Captain: {team_1_captain.mention} @{team_1_captain.user}\n"
+    captains_text += f"▪ Team2 Captain: {team_2_captain.mention} @{team_2_captain.user}"
     embed.add_field(name="👑 Team Captains", value=captains_text, inline=False)
     
     # Add spacing
@@ -1539,8 +1629,8 @@ async def event_result(
     
     # Captains Section
     captains_text = f"**Captains**\n"
-    captains_text += f"▪ Team1 Captain: {winner.mention} `@{winner.name}`\n"
-    captains_text += f"▪ Team2 Captain: {loser.mention} `@{loser.name}`"
+    captains_text += f"▪ Team1 Captain: {winner.mention} @{winner.name}\n"
+    captains_text += f"▪ Team2 Captain: {loser.mention} @{loser.name}"
     embed.add_field(name="", value=captains_text, inline=False)
     
     # Results Section
@@ -1550,7 +1640,7 @@ async def event_result(
     
     # Staff Section
     staff_text = f"👨‍⚖️ **Staffs**\n"
-    staff_text += f"▪ Judge: {interaction.user.mention} `@{interaction.user.name}`"
+    staff_text += f"▪ Judge: {interaction.user.mention} @{interaction.user.name}"
     embed.add_field(name="", value=staff_text, inline=False)
     
     # Remarks Section
@@ -1583,22 +1673,44 @@ async def event_result(
     
     embed.set_footer(text="Event Results • ICF Tournament Bot")
     
-    # Send confirmation to user
-    await interaction.followup.send("✅ Event results posted to Results channel and Staff Attendance logged!", ephemeral=True)
-    
-    # Post in Results channel with screenshots as attachments
+    # Post results using dual-channel functionality
     try:
         results_channel = interaction.guild.get_channel(CHANNEL_IDS["match_results"])
-        if results_channel:
-            if files_to_send:
-                # Send as attachments + single embed so Discord shows gallery above embed
-                await results_channel.send(embed=embed, files=files_to_send)
-            else:
-                await results_channel.send(embed=embed)
-        else:
+        origin_channel = interaction.channel
+        
+        if not results_channel:
             await interaction.followup.send("⚠️ Could not find Results channel.", ephemeral=True)
+            return
+        
+        if not origin_channel:
+            await interaction.followup.send("⚠️ Could not determine origin channel.", ephemeral=True)
+            return
+        
+        # Use ResultManager for dual-channel posting
+        results_success, origin_success = await ResultManager.post_result_dual_channel(
+            embed=embed,
+            files=files_to_send,
+            origin_channel=origin_channel,
+            results_channel=results_channel
+        )
+        
+        # Provide feedback based on posting results
+        if results_success and origin_success:
+            if ResultManager.should_duplicate_post(origin_channel, results_channel):
+                await interaction.followup.send("✅ Event results posted to Results channel and current channel! Staff Attendance logged!", ephemeral=True)
+            else:
+                await interaction.followup.send("✅ Event results posted to Results channel and Staff Attendance logged!", ephemeral=True)
+        elif results_success:
+            await interaction.followup.send("✅ Event results posted to Results channel! ⚠️ Could not post to current channel. Staff Attendance logged!", ephemeral=True)
+        elif origin_success:
+            await interaction.followup.send("⚠️ Could not post to Results channel, but posted to current channel. Staff Attendance logged!", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ Failed to post results to both channels. Please try again.", ephemeral=True)
+            return
+            
     except Exception as e:
-        await interaction.followup.send(f"⚠️ Could not post in Results channel: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Error posting results: {e}", ephemeral=True)
+        return
 
     # Winner-only summary removed per request
 
@@ -1611,7 +1723,7 @@ async def event_result(
             attendance_text += f"**Results**\n"
             attendance_text += f"🏆 {winner.display_name} ({winner_score}) Vs ({loser_score}) {loser.display_name} 💀\n\n"
             attendance_text += f"**Staffs**\n"
-            attendance_text += f"• Judge: {interaction.user.mention} `@{interaction.user.name}`"
+            attendance_text += f"• Judge: {interaction.user.mention} @{interaction.user.name}"
 
             await reports_channel.send(attendance_text)
         else:

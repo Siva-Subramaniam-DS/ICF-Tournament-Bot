@@ -166,7 +166,32 @@ class NotificationManager:
     async def send_judge_release_notification(self, judge, match_details)
 ```
 
-### 6. Data Persistence Layer
+### 6. Result Management System
+
+**Responsibilities:**
+- Match result recording and storage
+- Dual-channel posting for result visibility
+- Result formatting and presentation
+- Result validation and error handling
+
+**Key Components:**
+- `ResultManager`: Core result handling and dual-posting logic
+- `ResultFormatter`: Consistent result formatting across channels
+- `DualPostingHandler`: Manages posting to multiple channels with deduplication
+
+**Interfaces:**
+```python
+class ResultManager:
+    async def post_result(self, result_data, origin_channel, results_channel)
+    async def format_result_embed(self, result_data) -> discord.Embed
+    def should_duplicate_post(self, origin_channel, results_channel) -> bool
+
+class DualPostingHandler:
+    async def post_to_channels(self, content, origin_channel, results_channel)
+    async def handle_posting_errors(self, errors, channels)
+```
+
+### 7. Data Persistence Layer
 
 **Responsibilities:**
 - JSON-based data storage and retrieval
