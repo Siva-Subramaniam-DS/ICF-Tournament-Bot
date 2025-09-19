@@ -1457,15 +1457,11 @@ async def event_create(
     }
     
     # Save events to file
-    print(f"DEBUG: Saving scheduled events...")
     save_scheduled_events()
-    print(f"DEBUG: Events saved successfully")
     
     # Get random template image and create poster
-    print(f"DEBUG: Getting template image...")
     template_image = get_random_template()
     poster_image = None
-    print(f"DEBUG: Template image: {template_image}")
     
     if template_image:
         try:
@@ -1547,15 +1543,11 @@ async def event_create(
     take_schedule_view = TakeScheduleButton(event_id, team_1_captain, team_2_captain, interaction.channel)
     
     # Send confirmation to user
-    print(f"DEBUG: Sending confirmation to user...")
     await interaction.followup.send("✅ Event created and posted to both channels! Reminder will ping captains 10 minutes before start.", ephemeral=True)
-    print(f"DEBUG: Confirmation sent")
     
     # Post in schedules channel (with button)
     try:
-        print(f"DEBUG: Looking for schedules channel with ID {CHANNEL_IDS['schedules']}")
         schedule_channel = interaction.guild.get_channel(CHANNEL_IDS["schedules"])
-        print(f"DEBUG: Found channel: {schedule_channel}")
         if schedule_channel:
             judge_ping = f"<@&{ROLE_IDS['helpers_tournament']}> <@&{ROLE_IDS['organizers']}>"
             if poster_image:
@@ -1575,22 +1567,17 @@ async def event_create(
     
     # Post in the channel where command was used (without button)
     try:
-        print(f"DEBUG: Posting to current channel...")
         if poster_image:
             with open(poster_image, 'rb') as f:
                 file = discord.File(f, filename="event_poster.png")
                 await interaction.channel.send(embed=embed, file=file)
         else:
             await interaction.channel.send(embed=embed)
-        print(f"DEBUG: Posted to current channel successfully")
 
         # Schedule the 10-minute reminder
-        print(f"DEBUG: Scheduling reminder...")
         await schedule_ten_minute_reminder(event_id, team_1_captain, team_2_captain, None, interaction.channel, event_datetime)
-        print(f"DEBUG: Reminder scheduled successfully")
         
     except Exception as e:
-        print(f"DEBUG: Error posting to current channel: {e}")
         await interaction.followup.send(f"⚠️ Could not post in current channel: {e}", ephemeral=True)
 
 @tree.command(name="event-result", description="Add event results (Organizers/Helpers Tournament only)")
