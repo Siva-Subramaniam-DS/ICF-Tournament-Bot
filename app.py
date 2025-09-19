@@ -91,21 +91,13 @@ def save_scheduled_events():
             event_copy = event_data.copy()
             if 'datetime' in event_copy:
                 event_copy['datetime'] = event_copy['datetime'].isoformat()
-            
             # Remove non-serializable objects like discord.Member
             if 'judge' in event_copy:
                 event_copy['judge'] = None
             if 'team1_captain' in event_copy:
-                # Store captain ID instead of Member object
-                if hasattr(event_copy['team1_captain'], 'id'):
-                    event_copy['team1_captain_id'] = event_copy['team1_captain'].id
                 event_copy['team1_captain'] = None
             if 'team2_captain' in event_copy:
-                # Store captain ID instead of Member object
-                if hasattr(event_copy['team2_captain'], 'id'):
-                    event_copy['team2_captain_id'] = event_copy['team2_captain'].id
                 event_copy['team2_captain'] = None
-                
             data_to_save[event_id] = event_copy
         
         with open('scheduled_events.json', 'w') as f:
@@ -1449,7 +1441,7 @@ async def event_create(
     # Resolve round label from choice
     round_label = round.value if isinstance(round, app_commands.Choice) else str(round)
     
-    # Store event data for reminders (store IDs instead of Member objects to avoid JSON serialization issues)
+    # Store event data for reminders
     scheduled_events[event_id] = {
         'title': f"Round {round_label} Match",
         'datetime': event_datetime,
@@ -1460,8 +1452,8 @@ async def event_create(
         'tournament': tournament,
         'judge': None,
         'channel_id': interaction.channel.id,
-        'team1_captain_id': team_1_captain.id,
-        'team2_captain_id': team_2_captain.id
+        'team1_captain': team_1_captain,
+        'team2_captain': team_2_captain
     }
     
     # Save events to file
