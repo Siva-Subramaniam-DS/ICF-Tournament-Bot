@@ -44,6 +44,9 @@ ROLE_IDS = {
     "organizers": 1385296705179619450
 }
 
+# Bot owner ID - has access to all commands
+BOT_OWNER_ID = 1251442077561131059
+
 # Set Windows event loop policy for asyncio
 import sys
 if sys.platform == "win32":
@@ -255,7 +258,11 @@ def set_rules_content(content, user_id, username):
     return save_rules()
 
 def has_organizer_permission(interaction):
-    """Check if user has organizer permissions for rule management"""
+    """Check if user has organizer permissions for rule management (Organizers or Bot Owner)"""
+    # Bot owner has access to all commands
+    if interaction.user.id == BOT_OWNER_ID:
+        return True
+    
     organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
     return organizers_role is not None
 
@@ -349,12 +356,13 @@ class TakeScheduleButton(View):
             await interaction.response.send_message("⏳ Another judge is currently taking this schedule. Please wait a moment.", ephemeral=True)
             return
             
-        # Check if user has Helpers Tournament or Organizers role
-        organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
-        helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
-        if not (organizers_role or helpers_role):
-            await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to take this schedule.", ephemeral=True)
-            return
+        # Check if user has Helpers Tournament, Organizers role, or is Bot Owner
+        if interaction.user.id != BOT_OWNER_ID:
+            organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
+            helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
+            if not (organizers_role or helpers_role):
+                await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to take this schedule.", ephemeral=True)
+                return
             
         # Check if already taken
         if self.judge:
@@ -1136,13 +1144,21 @@ def calculate_time_difference(event_datetime: datetime.datetime, user_timezone: 
     }
 
 def has_event_create_permission(interaction):
-    """Check if user has permission to create events (Organizers or Helpers Tournament)"""
+    """Check if user has permission to create events (Organizers, Helpers Tournament, or Bot Owner)"""
+    # Bot owner has access to all commands
+    if interaction.user.id == BOT_OWNER_ID:
+        return True
+    
     organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
     helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
     return organizers_role is not None or helpers_role is not None
 
 def has_event_result_permission(interaction):
-    """Check if user has permission to post event results (Organizers or Helpers Tournament)"""
+    """Check if user has permission to post event results (Organizers, Helpers Tournament, or Bot Owner)"""
+    # Bot owner has access to all commands
+    if interaction.user.id == BOT_OWNER_ID:
+        return True
+    
     organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
     helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
     return organizers_role is not None or helpers_role is not None
@@ -1433,7 +1449,7 @@ async def event_create(
     # Resolve round label from choice
     round_label = round.value if isinstance(round, app_commands.Choice) else str(round)
     
-    # Store event data for reminders
+    # Store event data for reminders (store IDs instead of Member objects to avoid JSON serialization issues)
     scheduled_events[event_id] = {
         'title': f"Round {round_label} Match",
         'datetime': event_datetime,
@@ -1444,8 +1460,8 @@ async def event_create(
         'tournament': tournament,
         'judge': None,
         'channel_id': interaction.channel.id,
-        'team1_captain': team_1_captain,
-        'team2_captain': team_2_captain
+        'team1_captain_id': team_1_captain.id,
+        'team2_captain_id': team_2_captain.id
     }
     
     # Save events to file
@@ -1898,13 +1914,14 @@ async def choose(interaction: discord.Interaction, options: str):
 async def unassigned_events(interaction: discord.Interaction):
     """Show all scheduled events that do not currently have a judge assigned."""
     try:
-        # Allow Organizers and Helpers Tournament to view
-        organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"]) if interaction.user else None
-        helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"]) if interaction.user else None
+        # Allow Organizers, Helpers Tournament, and Bot Owner to view
+        if interaction.user.id != BOT_OWNER_ID:
+            organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"]) if interaction.user else None
+            helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"]) if interaction.user else None
 
-        if not (organizers_role or helpers_role):
-            await interaction.response.send_message("❌ You need Organizers or Helpers Tournament role to view unassigned events.", ephemeral=True)
-            return
+            if not (organizers_role or helpers_role):
+                await interaction.response.send_message("❌ You need Organizers or Helpers Tournament role to view unassigned events.", ephemeral=True)
+                return
 
         # Build list of unassigned events
         unassigned = []
@@ -2096,13 +2113,14 @@ async def general_tie_breaker(
 
 @tree.command(name="event-delete", description="Delete a scheduled event (Organizers/Helpers Tournament)")
 async def event_delete(interaction: discord.Interaction):
-    # Check permissions - Organizers and Helpers Tournament can delete events
-    organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
-    helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
-    
-    if not (organizers_role or helpers_role):
-        await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to delete events.", ephemeral=True)
-        return
+    # Check permissions - Organizers, Helpers Tournament, and Bot Owner can delete events
+    if interaction.user.id != BOT_OWNER_ID:
+        organizers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["organizers"])
+        helpers_role = discord.utils.get(interaction.user.roles, id=ROLE_IDS["helpers_tournament"])
+        
+        if not (organizers_role or helpers_role):
+            await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to delete events.", ephemeral=True)
+            return
     
     try:
         # Check if there are any scheduled events
