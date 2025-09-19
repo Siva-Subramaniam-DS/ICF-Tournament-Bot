@@ -359,12 +359,12 @@ class TakeScheduleButton(View):
         self._taking_schedule = True
         
         try:
-            # Send immediate response
-            await interaction.response.send_message("⏳ Taking schedule...", ephemeral=True)
+            # Defer response to give us time to process
+            await interaction.response.defer(ephemeral=True)
             
             # Double-check if still available (in case another judge took it while we were processing)
             if self.judge:
-                await interaction.edit_original_response(content=f"❌ This schedule has already been taken by {self.judge.display_name}.")
+                await interaction.followup.send(f"❌ This schedule has already been taken by {self.judge.display_name}.", ephemeral=True)
                 return
             
             # Assign judge
@@ -385,14 +385,14 @@ class TakeScheduleButton(View):
             
             # Update judge field using safe utility function
             if not update_judge_field(embed, interaction.user):
-                await interaction.edit_original_response(content="❌ Failed to update embed with judge information.")
+                await interaction.followup.send("❌ Failed to update embed with judge information.", ephemeral=True)
                 return
             
             # Update the message with the updated take button only
             await interaction.message.edit(embed=embed, view=self)
             
             # Send success message
-            await interaction.edit_original_response(content="✅ You have successfully taken this schedule!")
+            await interaction.followup.send("✅ You have successfully taken this schedule!", ephemeral=True)
             
             # Send notification to the event channel
             await self.send_judge_assignment_notification(interaction.user)
@@ -405,7 +405,7 @@ class TakeScheduleButton(View):
             # Reset flag in case of error
             self._taking_schedule = False
             print(f"Error in take_schedule: {e}")
-            await interaction.edit_original_response(content=f"❌ An error occurred while taking the schedule: {str(e)}")
+            await interaction.followup.send(f"❌ An error occurred while taking the schedule: {str(e)}", ephemeral=True)
         finally:
             # Reset flag after processing
             self._taking_schedule = False
@@ -1383,29 +1383,29 @@ async def event_create(
 ):
     """Creates an event with the specified parameters"""
     
-    # Check permissions first (fast check)
-    if not has_event_create_permission(interaction):
-        await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to create events.", ephemeral=True)
-        return
+    # Defer the response to give us more time for image processing
+    await interaction.response.defer(ephemeral=True)
     
-    # Send immediate response to avoid thinking message
-    await interaction.response.send_message("⏳ Creating event... This may take a moment for image processing.", ephemeral=True)
+    # Check permissions
+    if not has_event_create_permission(interaction):
+        await interaction.followup.send("❌ You need **Organizers** or **Helpers Tournament** role to create events.", ephemeral=True)
+        return
     
     # Validate input parameters
     if not (0 <= hour <= 23):
-        await interaction.edit_original_response(content="❌ Hour must be between 0 and 23")
+        await interaction.followup.send("❌ Hour must be between 0 and 23", ephemeral=True)
         return
     
     if not (1 <= date <= 31):
-        await interaction.edit_original_response(content="❌ Date must be between 1 and 31")
+        await interaction.followup.send("❌ Date must be between 1 and 31", ephemeral=True)
         return
 
     if not (1 <= month <= 12):
-        await interaction.edit_original_response(content="❌ Month must be between 1 and 12")
+        await interaction.followup.send("❌ Month must be between 1 and 12", ephemeral=True)
         return
             
     if not (0 <= minute <= 59):
-        await interaction.edit_original_response(content="❌ Minute must be between 0 and 59")
+        await interaction.followup.send("❌ Minute must be between 0 and 59", ephemeral=True)
         return
 
     # Generate unique event ID
@@ -1523,7 +1523,7 @@ async def event_create(
     take_schedule_view = TakeScheduleButton(event_id, team_1_captain, team_2_captain, interaction.channel)
     
     # Send confirmation to user
-    await interaction.edit_original_response(content="✅ Event created and posted to both channels! Reminder will ping captains 10 minutes before start.")
+    await interaction.followup.send("✅ Event created and posted to both channels! Reminder will ping captains 10 minutes before start.", ephemeral=True)
     
     # Post in schedules channel (with button)
     try:
@@ -1558,7 +1558,7 @@ async def event_create(
         await schedule_ten_minute_reminder(event_id, team_1_captain, team_2_captain, None, interaction.channel, event_datetime)
         
     except Exception as e:
-        await interaction.edit_original_response(content=f"⚠️ Could not post in current channel: {e}")
+        await interaction.followup.send(f"⚠️ Could not post in current channel: {e}", ephemeral=True)
 
 @tree.command(name="event-result", description="Add event results (Organizers/Helpers Tournament only)")
 @app_commands.describe(
@@ -1604,17 +1604,17 @@ async def event_result(
 ):
     """Adds results for an event"""
     
-    # Check permissions first (fast check)
-    if not has_event_result_permission(interaction):
-        await interaction.response.send_message("❌ You need **Organizers** or **Helpers Tournament** role to post event results.", ephemeral=True)
-        return
+    # Defer the response immediately to avoid timeout issues
+    await interaction.response.defer(ephemeral=True)
     
-    # Send immediate response to avoid thinking message
-    await interaction.response.send_message("⏳ Processing event results... This may take a moment for file uploads.", ephemeral=True)
+    # Check permissions
+    if not has_event_result_permission(interaction):
+        await interaction.followup.send("❌ You need **Organizers** or **Helpers Tournament** role to post event results.", ephemeral=True)
+        return
 
     # Validate scores
     if winner_score < 0 or loser_score < 0:
-        await interaction.edit_original_response(content="❌ Scores cannot be negative")
+        await interaction.followup.send("❌ Scores cannot be negative", ephemeral=True)
         return
             
     # Create results embed matching the exact template format
@@ -1679,11 +1679,11 @@ async def event_result(
         origin_channel = interaction.channel
         
         if not results_channel:
-            await interaction.edit_original_response(content="⚠️ Could not find Results channel.")
+            await interaction.followup.send("⚠️ Could not find Results channel.", ephemeral=True)
             return
         
         if not origin_channel:
-            await interaction.edit_original_response(content="⚠️ Could not determine origin channel.")
+            await interaction.followup.send("⚠️ Could not determine origin channel.", ephemeral=True)
             return
         
         # Use ResultManager for dual-channel posting
@@ -1697,19 +1697,19 @@ async def event_result(
         # Provide feedback based on posting results
         if results_success and origin_success:
             if ResultManager.should_duplicate_post(origin_channel, results_channel):
-                await interaction.edit_original_response(content="✅ Event results posted to Results channel and current channel! Staff Attendance logged!")
+                await interaction.followup.send("✅ Event results posted to Results channel and current channel! Staff Attendance logged!", ephemeral=True)
             else:
-                await interaction.edit_original_response(content="✅ Event results posted to Results channel and Staff Attendance logged!")
+                await interaction.followup.send("✅ Event results posted to Results channel and Staff Attendance logged!", ephemeral=True)
         elif results_success:
-            await interaction.edit_original_response(content="✅ Event results posted to Results channel! ⚠️ Could not post to current channel. Staff Attendance logged!")
+            await interaction.followup.send("✅ Event results posted to Results channel! ⚠️ Could not post to current channel. Staff Attendance logged!", ephemeral=True)
         elif origin_success:
-            await interaction.edit_original_response(content="⚠️ Could not post to Results channel, but posted to current channel. Staff Attendance logged!")
+            await interaction.followup.send("⚠️ Could not post to Results channel, but posted to current channel. Staff Attendance logged!", ephemeral=True)
         else:
-            await interaction.edit_original_response(content="❌ Failed to post results to both channels. Please try again.")
+            await interaction.followup.send("❌ Failed to post results to both channels. Please try again.", ephemeral=True)
             return
             
     except Exception as e:
-        await interaction.edit_original_response(content=f"❌ Error posting results: {e}")
+        await interaction.followup.send(f"❌ Error posting results: {e}", ephemeral=True)
         return
 
     # Winner-only summary removed per request
