@@ -1387,6 +1387,7 @@ async def event(interaction: discord.Interaction, action: app_commands.Choice[st
         app_commands.Choice(name="R10", value="R10"),
         app_commands.Choice(name="Qualifier", value="Qualifier"),
         app_commands.Choice(name="Semi Final", value="Semi Final"),
+        app_commands.Choice(name="Bronze", value="Bronze"),
         app_commands.Choice(name="Final", value="Final"),
     ]
 )
@@ -1587,7 +1588,7 @@ async def event_create(
     loser="Loser of the event", 
     loser_score="Loser's score",
     tournament="Tournament name (e.g., The Zumwalt S2)",
-    round="Round name (e.g., Semi-Final, Final, Quarter-Final)",
+    round="Round name",
     remarks="Remarks about the match (e.g., ggwp, close match)",
     ss_1="Screenshot 1 (upload)",
     ss_2="Screenshot 2 (upload)",
@@ -1601,6 +1602,24 @@ async def event_create(
     ss_10="Screenshot 10 (upload)",
     ss_11="Screenshot 11 (upload)"
 )
+@app_commands.choices(
+    round=[
+        app_commands.Choice(name="R1", value="R1"),
+        app_commands.Choice(name="R2", value="R2"),
+        app_commands.Choice(name="R3", value="R3"),
+        app_commands.Choice(name="R4", value="R4"),
+        app_commands.Choice(name="R5", value="R5"),
+        app_commands.Choice(name="R6", value="R6"),
+        app_commands.Choice(name="R7", value="R7"),
+        app_commands.Choice(name="R8", value="R8"),
+        app_commands.Choice(name="R9", value="R9"),
+        app_commands.Choice(name="R10", value="R10"),
+        app_commands.Choice(name="Qualifier", value="Qualifier"),
+        app_commands.Choice(name="Semi Final", value="Semi Final"),
+        app_commands.Choice(name="Bronze", value="Bronze"),
+        app_commands.Choice(name="Final", value="Final"),
+    ]
+)
 async def event_result(
     interaction: discord.Interaction,
     winner: discord.Member,
@@ -1608,7 +1627,7 @@ async def event_result(
     loser: discord.Member,
     loser_score: int,
     tournament: str,
-    round: str,
+    round: app_commands.Choice[str],
     remarks: str = "ggwp",
     ss_1: discord.Attachment = None,
     ss_2: discord.Attachment = None,
@@ -1637,12 +1656,15 @@ async def event_result(
         await interaction.followup.send("❌ Scores cannot be negative", ephemeral=True)
         return
             
+    # Resolve round label from choice
+    round_label = round.value if isinstance(round, app_commands.Choice) else str(round)
+    
     # Create results embed matching the exact template format
     embed = discord.Embed(
         title="Results",
         description=f"🗓️ {winner.display_name} Vs {loser.display_name}\n"
                    f"**Tournament:** {tournament}\n"
-                   f"**Round:** {round}",
+                   f"**Round:** {round_label}",
         color=discord.Color.gold(),
         timestamp=discord.utils.utcnow()
     )
@@ -1739,7 +1761,7 @@ async def event_result(
         reports_channel = interaction.guild.get_channel(CHANNEL_IDS["match_reports"])
         if reports_channel:
             attendance_text = f"🏅 {winner.display_name} Vs {loser.display_name}\n"
-            attendance_text += f"**Round :** {round}\n\n"
+            attendance_text += f"**Round :** {round_label}\n\n"
             attendance_text += f"**Results**\n"
             attendance_text += f"🏆 {winner.display_name} ({winner_score}) Vs ({loser_score}) {loser.display_name} 💀\n\n"
             attendance_text += f"**Staffs**\n"
